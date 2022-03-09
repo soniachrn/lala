@@ -1,0 +1,176 @@
+grammar: Lala
+version: 0.0.1
+
+
+# Parser
+
+program         : top-statement* ;
+
+top-statement   : declaration ;
+
+# Declaration
+declaration     : variable
+                | function
+                | structure
+                | enum
+                | statement
+                ;
+variable        : VAR? typed-id init? ;
+init            : EQUAL expression ;
+function        : FUNCTION ID parameters type-spec statement ;
+parameters      : LPAREN (variable (COMMA variable)* COMMA?)? RPAREN ;
+structure       : STRUCTURE ID LBRACE member* RBRACE ;
+enum            : ENUM 
+member          : predicate
+                | typed-id
+                ;
+predicate       : PREDICATE expression ;
+typed-id        : ID type-spec ;
+
+# Statement
+statement       : print
+                | assert
+                | assignment
+                | if
+                | while
+                | do-while
+                | for
+                | CONTINUE
+                | BREAK
+                | RETURN
+                | block
+                ;
+print           : PRINT expression ;
+assert          : ASSERT expression ;
+assignment      : ID assign-op expression ;
+assign-op       : EQUAL
+                | PLUS-EQUAL
+                | MINUS-EQUAL
+                | STAR-EQUAL
+                | SLASH-EQUAL
+                | PERCENT-EQUAL
+                ;
+if              : IF expression statement else? ;
+else            : ELSE statement ;
+while           : WHILE expression statement ;
+do-while        : DO statement WHILE expression ;
+for             : FOR ID IN expression statement ;
+block           : LBRACE declaration RBRACE ;
+
+# Expression
+expression      : ternary ;
+ternary         : or QUESTION or COLON or ;
+or              : and (OR and)* ;
+and             : equality (AND equality)* ;
+equality        : comparison (equality-op comparison)* ;
+equality-op     : EQUAL-EQUAL
+                | EXCLAMATION-EQUAL
+                ;
+comparison      : term (comparison-op term)* ;
+comparison-op   : GREATER-EQUAL
+                | LESS-EQUAL
+                | GREATER
+                | LESS
+                ;
+term            : factor (term-op factor)* ;
+term-op         : PLUS
+                | MINUS
+                ;
+factor          : prefix (factor-op prefix)* ;
+factor-op       : STAR
+                | SLASH
+                | PERCENT
+                ;
+prefix          : (MINUS | EXCLAMATION) postfix ;
+postfix         : primary postfixop* ;
+postfixop       : DOT ID
+                | call
+                | LBRACKET expression RBRACKET
+                | typespec
+                ;
+call            : LPAREN (argument (COMMA argument)* COMMA?)? RPAREN ;
+argument        : (ID EQUAL)? expression ;
+primary         : TRUE
+                | FALSE
+                | NUMBER
+                | STRING
+                | ID
+                | array
+                | map
+                | LPAREN expression RPAREN
+                ;
+array           : LBRACKET (expression (COMMA expression)* COMMA?)? RBRACKET ;
+map             : LBRACE (mapitem (COMMA mapitem)* COMMA?)? RBRACE;
+mapitem         : expression COLON expression ;
+
+# Utility
+type-spec       : COLON type ;
+type            : MUTABLE? immutabletype ;
+immutabletype   : LBRACKET type RBRACKET
+                | LBRACE type COLON type RBRACE
+                | ID
+                ;
+
+
+# Lexer
+
+COLON           : : ;
+COMMA           : , ;
+DOT             : . ;
+EQUAL           : = ;
+EQUAL-EQUAL     : == ;
+EXCLAMATION     : ! ;
+EXCLAMATION-EQUAL: != ;
+GREATER         : > ;
+GREATER-EQUAL   : >= ;
+LBRACE          : { ;
+LBRACKET        : [ ;
+LESS            : < ;
+LESS-EQUAL      : <= ;
+LPAREN          : ( ;
+MINUS           : - ;
+MINUS-EQUAL     : -= ;
+PERCENT         : % ;
+PERCENT-EQUAL   : %= ;
+PLUS            : + ;
+PLUS-EQUAL      : += ;
+QUESTION        : ? ;
+RBRACE          : } ;
+RBRACKET        : ] ;
+RPAREN          : ) ;
+SLASH           : / ;
+SLASH-EQUAL     : /= ;
+STAR            : * ;
+STAR-EQUAL      : *= ;
+
+AND             : and ;
+ASSERT          : assert ;
+BREAK           : break ;
+CONTINUE        : continue ;
+ELSE            : else ;
+ENUM            : enum ;
+FALSE           : false ;
+FOR             : for ;
+FUNCTION        : function ;
+IF              : if ;
+IN              : in ;
+MUTABLE         : mutable ;
+OR              : or ;
+PREDICATE       : predicate ;
+PRINT           : print ;
+RETURN          : return ;
+STRUCTURE       : structure ;
+TRUE            : true ;
+VAR             : var ;
+WHILE           : while ;
+
+NUMBER              : ( ([1-9][0-9]*) | 0) (\.[0-9]+)? ;
+STRING              : \' ( [^\'\\] | \\ [trn\'\\] )* \' ;
+ID                  : [a-zA-Z] ([a-zA-Z0-9\-]* [a-zA-Z0-9])? ;
+
+# Ignore
+COMMENT             : \| [^\n]* \n
+                    | /- ([^-] | - [^/])* -/
+                    ;
+WHITESPACE          : [ \r\t\n]* ;
+
