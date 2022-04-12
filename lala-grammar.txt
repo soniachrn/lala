@@ -1,5 +1,40 @@
 grammar: Lala
-version: 0.0.1
+version: 0.0.2
+
+
+# TODO: forward declarations
+
+# Types:
+#
+#   null     - ? - see no reason to have it
+#   optional - ? - yes
+#   function - ?
+#
+#   bool            false
+#   int             0
+#   uint            0
+#   float           0
+#   string          ''
+#   array           []
+#   map             {}
+#   function
+#   user-defined    ...
+#   user-defined?   no-value
+
+# Needed type casts:
+#   uint <———> int <———> float
+#   any type <———> string
+#   user-defined <———> user-defined?
+
+# Operators
+#   or and       b-b
+#   == !=        any matching type
+#   >= <= > <    i-i   f-f   s-s
+#   +            i-i   f-f   s-s
+#   -            i-i   f-f
+#   * /          i-i   f-f
+#   %            i-i   f-i
+#
 
 
 # Parser
@@ -15,9 +50,9 @@ declaration     : variable
                 | enum
                 | statement
                 ;
-variable        : VAR? typed-id init? ;
+variable        : VAR? typed-id init? ;         # Bad here
 init            : EQUAL expression ;
-function        : FUNCTION ID parameters type-spec statement ;
+function        : FUNCTION ID parameters type-spec block? ;
 parameters      : LPAREN (variable (COMMA variable)* COMMA?)? RPAREN ;
 structure       : STRUCTURE ID LBRACE member* RBRACE ;
 enum            : ENUM 
@@ -35,6 +70,7 @@ statement       : print
                 | while
                 | do-while
                 | for
+                | function-call
                 | CONTINUE
                 | BREAK
                 | RETURN
@@ -55,19 +91,21 @@ else            : ELSE statement ;
 while           : WHILE expression statement ;
 do-while        : DO statement WHILE expression ;
 for             : FOR ID IN expression statement ;
+function-call   : postfix ;                                 # Compiler should force this postfix to end with a call.
 block           : LBRACE declaration RBRACE ;
 
 # Expression
-expression      : ternary ;
-ternary         : or QUESTION or COLON or ;
+expression      : and ;
 or              : and (OR and)* ;
 and             : equality (AND equality)* ;
-equality        : comparison (equality-op comparison)* ;
+equality        : comparison (equality-op comparison)? ;
 equality-op     : EQUAL-EQUAL
                 | EXCLAMATION-EQUAL
                 ;
-comparison      : term (comparison-op term)* ;
-comparison-op   : GREATER-EQUAL
+comparison      : term (comparison-op term)? ;
+comparison-op   : EQUAL-EQUAL
+                | EXCLAMATION-EQUAL
+                | GREATER-EQUAL
                 | LESS-EQUAL
                 | GREATER
                 | LESS
@@ -81,19 +119,20 @@ factor-op       : STAR
                 | SLASH
                 | PERCENT
                 ;
-prefix          : (MINUS | EXCLAMATION) postfix ;
+prefix          : (MINUS | EXCLAMATION)? postfix ;
 postfix         : primary postfixop* ;
 postfixop       : DOT ID
                 | call
                 | LBRACKET expression RBRACKET
-                | typespec
+                | type-cast
                 ;
 call            : LPAREN (argument (COMMA argument)* COMMA?)? RPAREN ;
 argument        : (ID EQUAL)? expression ;
 primary         : TRUE
                 | FALSE
-                | NUMBER
-                | STRING
+                | INTEGER_VALUE
+                | FLOAT_VALUE
+                | STRING_VALUE
                 | ID
                 | array
                 | map
@@ -105,10 +144,17 @@ mapitem         : expression COLON expression ;
 
 # Utility
 type-spec       : COLON type ;
-type            : MUTABLE? immutabletype ;
-immutabletype   : LBRACKET type RBRACKET
-                | LBRACE type COLON type RBRACE
+type-cast       : COLON castable-type ;
+type            : MUTABLE? immutable-type ;
+immutable-type  : castable-type
+                | BOOL
                 | ID
+                | LBRACKET type RBRACKET
+                | LBRACE type COLON type RBRACE
+                ;
+castable-type   : INT
+                | FLOAT
+                | STRING
                 ;
 
 
@@ -134,7 +180,6 @@ PERCENT         : % ;
 PERCENT-EQUAL   : %= ;
 PLUS            : + ;
 PLUS-EQUAL      : += ;
-QUESTION        : ? ;
 RBRACE          : } ;
 RBRACKET        : ] ;
 RPAREN          : ) ;
@@ -145,27 +190,32 @@ STAR-EQUAL      : *= ;
 
 AND             : and ;
 ASSERT          : assert ;
+BOOL            : bool ;
 BREAK           : break ;
 CONTINUE        : continue ;
 ELSE            : else ;
 ENUM            : enum ;
 FALSE           : false ;
+FLOAT           : float ;
 FOR             : for ;
 FUNCTION        : function ;
 IF              : if ;
 IN              : in ;
+INT             : int ;
 MUTABLE         : mutable ;
 OR              : or ;
 PREDICATE       : predicate ;
 PRINT           : print ;
 RETURN          : return ;
+STRING          : string ;
 STRUCTURE       : structure ;
 TRUE            : true ;
 VAR             : var ;
 WHILE           : while ;
 
-NUMBER              : ( ([1-9][0-9]*) | 0) (\.[0-9]+)? ;
-STRING              : \' ( [^\'\\] | \\ [trn\'\\] )* \' ;
+INTEGER_VALUE       : ( ([1-9][0-9]*) | 0) ;
+FLOAT_VALUE         : INTEGER_VALUE (\.[0-9]+) ;
+STRING_VALUE        : \' ( [^\'\\] | \\ [trn\'\\] )* \' ;
 ID                  : [a-zA-Z] ([a-zA-Z0-9\-]* [a-zA-Z0-9])? ;
 
 # Ignore
