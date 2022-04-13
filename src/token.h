@@ -4,6 +4,9 @@
 #define lala_token_h
 
 
+#include <stdint.h>
+
+
 // ┌───────┐
 // │ Types │
 // └───────┘
@@ -35,40 +38,45 @@ typedef enum {
     TOKEN_PERCENT_EQUAL,
     TOKEN_PLUS,
     TOKEN_PLUS_EQUAL,
-    TOKEN_QUESTION,
     TOKEN_RBRACE,
     TOKEN_RBRACKET,
     TOKEN_RPAREN,
+    TOKEN_SEMICOLON,
     TOKEN_SLASH,
     TOKEN_SLASH_EQUAL,
     TOKEN_STAR,
     TOKEN_STAR_EQUAL,
     
-    // Words
+    // Keyords
     TOKEN_AND,
     TOKEN_ASSERT,
+    TOKEN_BOOL,
     TOKEN_BREAK,
     TOKEN_CONTINUE,
     TOKEN_ELSE,
     TOKEN_ENUM,
     TOKEN_FALSE,
+    TOKEN_FLOAT,
     TOKEN_FOR,
     TOKEN_FUNCTION,
     TOKEN_IF,
     TOKEN_IN,
+    TOKEN_INT,
     TOKEN_MUTABLE,
     TOKEN_OR,
     TOKEN_PREDICATE,
     TOKEN_PRINT,
     TOKEN_RETURN,
+    TOKEN_STRING,
     TOKEN_STRUCTURE,
     TOKEN_TRUE,
     TOKEN_VAR,
     TOKEN_WHILE,
 
     // Complex
-    TOKEN_NUMBER,
-    TOKEN_STRING,
+    TOKEN_INTEGER_VALUE,
+    TOKEN_FLOAT_VALUE,
+    TOKEN_STRING_VALUE,
     TOKEN_IDENTIFIER,
 
 } TokenType;
@@ -80,6 +88,13 @@ typedef struct {
     uint16_t line;
     uint8_t symbol;
 } Token;
+
+
+// ┌───────────┐
+// │ Functions │
+// └───────────┘
+
+const char* tokenTypeName(TokenType type);
 
 
 #endif
