@@ -8,31 +8,25 @@
 
 #include "lexer.h"
 #include "op_code.h"
+#include "scope.h"
 #include "stack.h"
 #include "token.h"
+#include "value_type.h"
 
 
 // ┌───────┐
 // │ Types │
 // └───────┘
 
-typedef enum {
-    VALUE_BOOL,
-    VALUE_INT,
-    VALUE_FLOAT,
-    VALUE_STRING,
-    // VALUE_ARRAY,
-    // VALUE_MAP,
-    // VALUE_USER_DEFINED,
-} ValueType;
-
 typedef struct {
     Lexer* lexer;
-    // Chunk* chunk;
     Stack* chunk;
+
     Token previous;
     Token next;
     bool did_read_next;
+    
+    Scope* scope;
 } Parser;
 
 

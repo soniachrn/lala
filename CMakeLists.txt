@@ -22,18 +22,31 @@ add_compile_options(
 
     -Wno-gnu-statement-expression
     -Wno-gnu-folding-constant
+
+    -fshort-enums
 )
 
 add_subdirectory(lib/cut)
+add_subdirectory(lib/hashmap)
 
 project(Lala)
 
 add_library(Lala
     src/lexer.c
     src/parser.c
+    src/scope.c
     src/stack.c
     src/token.c
+    src/value_type.c
     src/vm.c
+)
+target_link_libraries(Lala PUBLIC
+    HashMap
+)
+target_include_directories(Lala PUBLIC
+    "lib/debug"
+    "lib/hashmap"
+    "src"
 )
 
 add_executable(LalaTest
@@ -41,14 +54,13 @@ add_executable(LalaTest
     test/parser_test.c
     test/vm_test.c
 )
-
 target_link_libraries(LalaTest PUBLIC
     Cut
     Lala
 )
-
 target_include_directories(LalaTest PUBLIC
     "lib/cut"
+    "lib/debug"
     "src"
 )
 

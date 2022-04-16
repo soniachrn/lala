@@ -7,16 +7,17 @@
 #define ARRAY(...)  __VA_ARGS__
 
 
-#define EXPECT_STACK_STATE(vm, expected_stack)                           \
-    {                                                                    \
-        uint8_t expected[] = expected_stack;                             \
-        for (size_t i = 0; i < (size_t)(vm.stack.stack_top - vm.stack.stack); ++i) { \
-            EXPECT_EQUALS_F(                                             \
-                vm.stack.stack[i],                                             \
-                expected[i],                                             \
-                "0x%02X"                                                 \
-            );                                                           \
-        }                                                                \
+#define EXPECT_STACK_STATE(vm, expected_stack)                    \
+    {                                                             \
+        uint8_t expected[] = expected_stack;                      \
+        size_t n = (size_t)(vm.stack.stack_top - vm.stack.stack); \
+        for (size_t i = 0; i < n; ++i) {                          \
+            EXPECT_EQUALS_F(                                      \
+                vm.stack.stack[i],                                \
+                expected[i],                                      \
+                "0x%02X"                                          \
+            );                                                    \
+        }                                                         \
     }
 
 #define TEST_VM(name, bytecode, expected_stack)             \
@@ -233,6 +234,34 @@ TEST_VM(LessFloat,
         OP_LESS_FLOAT
     }),
     ARRAY({ 0x00, 0x01 })  // false true
+);
+
+TEST_VM(Variables,
+    ARRAY({
+        OP_PUSH_TRUE,                           // var b1: bool  = true
+        OP_PUSH_FALSE,                          // var b2: bool  = false
+        OP_PUSH_INT,   0x04, 0x00, 0x00, 0x00,  // var i1: int   = 4
+        OP_PUSH_INT,   0x08, 0x00, 0x00, 0x00,  // var i2: int   = 8
+        OP_PUSH_FLOAT, BINARY_FLOAT_0_5,        // var f1: float = 0.5
+        OP_PUSH_FLOAT, BINARY_FLOAT_2,          // var f2: float = 2
+        // b1 = b2
+        OP_GET_BYTE_FROM_STACK,  0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 1 (b2)
+        OP_SET_BYTE_ON_STACK,    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 0 (b1)
+        // i1 = i2
+        OP_GET_INT_FROM_STACK,   0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 6 (i2)
+        OP_SET_INT_ON_STACK,     0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 2 (i1)
+        // f1 = f2
+        OP_GET_FLOAT_FROM_STACK, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 18 (f2)
+        OP_SET_FLOAT_ON_STACK,   0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 10 (f1)
+    }),
+    ARRAY({
+        0x00,                    // false (b1)
+        0x00,                    // false (b2)
+        0x08, 0x00, 0x00, 0x00,  // 8 (i1)
+        0x08, 0x00, 0x00, 0x00,  // 8 (i2)
+        BINARY_FLOAT_2,          // 2 (f1)
+        BINARY_FLOAT_2           // 2 (f2)
+    })
 );
 
 

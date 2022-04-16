@@ -107,17 +107,17 @@ void fdumpLexer(FILE* out, const Lexer* lexer, int padding) {
     }
 
     if (!lexer) {
-        printf("Lexer *(NULL)\n");
+        fprintf(out, "Lexer *(NULL)\n");
     } else {
-        printf("Lexer *(%p) %s {\n",
+        fprintf(out, "Lexer *(%p) %s {\n",
             (const void*)lexer,
             VALIDATE_LEXER(lexer) ? "VALID" : "INVALID"
         );
-        printf("  token_start        = *(%p) '%c'\n", (const void*)lexer->token_start, lexer->token_start[0]);
-        printf("  current            = *(%p) '%c'\n", (const void*)lexer->current, lexer->current[0]);
-        printf("  line               = %d\n", lexer->line);
+        printf("  token_start = *(%p) '%c'\n", (const void*)lexer->token_start, lexer->token_start[0]);
+        printf("  current = *(%p) '%c'\n", (const void*)lexer->current, lexer->current[0]);
+        printf("  line = %d\n", lexer->line);
         printf("  token_start_symbol = %d\n", lexer->token_start_symbol);
-        printf("  symbol             = %d\n", lexer->symbol);
+        printf("  symbol = %d\n", lexer->symbol);
         printf("}\n");
     }
 

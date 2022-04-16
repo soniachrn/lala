@@ -20,21 +20,13 @@ add_compile_options(
 )
 
 
-project(Cut VERSION 1.0)
+project(HashMap VERSION 1.0)
 
-add_library(Cut
-    cut.c
+add_library(HashMap
+    hashmap.c
 )
 
-target_include_directories(Cut PUBLIC
-    "../ccf"
-)
-
-add_executable(Example
-    example.c
-)
-
-target_link_libraries(Example
-    Cut
+target_include_directories(HashMap PUBLIC
+    "../debug"
 )
 

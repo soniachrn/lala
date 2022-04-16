@@ -51,6 +51,23 @@ typedef enum {
     OP_CAST_FLOAT_TO_INT,
     OP_CAST_INT_TO_FLOAT,
 
+    // Local variables
+    // The duplication may be resolved by adding another
+    // parameter for OP_GET / OP_SET commands, but 
+    // there's no need in it at the moment and its' 
+    // faster the way it is now anyway.
+    OP_GET_BYTE_FROM_STACK,
+    OP_GET_INT_FROM_STACK,
+    OP_GET_FLOAT_FROM_STACK,
+    OP_SET_BYTE_ON_STACK,
+    OP_SET_INT_ON_STACK,
+    OP_SET_FLOAT_ON_STACK,
+
+    // Print
+    OP_PRINT_BOOL,
+    OP_PRINT_INT,
+    OP_PRINT_FLOAT,
+
     // Empty
     OP_EMPTY,
 } OpCode;

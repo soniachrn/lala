@@ -40,6 +40,7 @@
 static uint8_t readByteFromSource( VM* vm);
 static int32_t readIntFromSource(  VM* vm);
 static double  readFloatFromSource(VM* vm);
+static size_t readAddressFromSource(VM* vm);
 
 
 // ┌──────────────────────────┐
@@ -77,13 +78,15 @@ void interpret(VM* vm) {
 
     // TODO check that ip didn't encounter '\0' when doint vm->ip +=
 
-#define PUSH_BYTE( value) pushByteOnStack( &vm->stack, (value))
-#define PUSH_INT(  value) pushIntOnStack(  &vm->stack, (value))
-#define PUSH_FLOAT(value) pushFloatOnStack(&vm->stack, (value))
+#define PUSH_BYTE(   value) pushByteOnStack( &vm->stack, (value))
+#define PUSH_INT(    value) pushIntOnStack(  &vm->stack, (value))
+#define PUSH_FLOAT(  value) pushFloatOnStack(&vm->stack, (value))
+#define PUSH_ADDRESS(value) pushAddressOnStack(&vm->stack, (value))
 
-#define POP_BYTE( ) popByteFromStack( &vm->stack)
-#define POP_INT(  ) popIntFromStack(  &vm->stack)
-#define POP_FLOAT() popFloatFromStack(&vm->stack)
+#define POP_BYTE( )   popByteFromStack( &vm->stack)
+#define POP_INT(  )   popIntFromStack(  &vm->stack)
+#define POP_FLOAT()   popFloatFromStack(&vm->stack)
+#define POP_ADDRESS() popAddressFromStack(&vm->stack)
 
     while (vm->ip[0] != '\0') {
         switch ((OpCode)readByteFromSource(vm)) {
@@ -153,14 +156,55 @@ void interpret(VM* vm) {
             case OP_CAST_FLOAT_TO_INT: assert(false); // TODO: Not implemented yet
             case OP_CAST_INT_TO_FLOAT: assert(false); // TODO: Not implemented yet
 
+#define GET_FROM_STACK_OP(type_name)   \
+    push ## type_name ## OnStack(      \
+        &vm->stack,                    \
+        get ## type_name ## FromStack( \
+            &vm->stack,                \
+            readAddressFromSource(vm)  \
+        )                              \
+    )
+
+#define SET_ON_STACK_OP(type_name)                \
+    set ## type_name ## OnStack(                  \
+        &vm->stack,                               \
+        readAddressFromSource(vm),                \
+        pop ## type_name ## FromStack(&vm->stack) \
+    )
+
+            // Local variables
+
+            case OP_GET_BYTE_FROM_STACK:  GET_FROM_STACK_OP(Byte);  break;
+            case OP_GET_INT_FROM_STACK:   GET_FROM_STACK_OP(Int);   break;
+            case OP_GET_FLOAT_FROM_STACK: GET_FROM_STACK_OP(Float); break;
+            case OP_SET_BYTE_ON_STACK:    SET_ON_STACK_OP(Byte);    break;
+            case OP_SET_INT_ON_STACK:     SET_ON_STACK_OP(Int);     break;
+            case OP_SET_FLOAT_ON_STACK:   SET_ON_STACK_OP(Float);   break;
+
+#undef SET_ON_STACK_OP
+#undef GET_FROM_STACK_OP
+
+            // Print
+            case OP_PRINT_BOOL:
+                printf("%s\n", POP_BYTE() ? "true" : "false");
+                break;
+            case OP_PRINT_INT:
+                printf("%d\n", POP_INT());
+                break;
+            case OP_PRINT_FLOAT:
+                printf("%f\n", POP_FLOAT());
+                break;
+
             default: assert(false); // TODO: error
         }
     }
 
+#undef POP_ADDRESS
 #undef POP_FLOAT
 #undef POP_INT
 #undef POP_BYTE
 
+#undef PUSH_ADDRESS
 #undef PUSH_FLOAT
 #undef PUSH_INT
 #undef PUSH_BYTE
@@ -189,6 +233,13 @@ static double readFloatFromSource(VM* vm) {
     ASSERT_VM(vm);
     double value = *(double*)vm->ip;
     vm->ip += sizeof(double);
+    return value;
+}
+
+static size_t readAddressFromSource(VM* vm) {
+    ASSERT_VM(vm);
+    size_t value = *(size_t*)vm->ip;
+    vm->ip += sizeof(size_t);
     return value;
 }
 

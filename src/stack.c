@@ -84,30 +84,33 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
 #define MIN(a, b) (a < b ? a : b)
 
     if (!stack) {
-        printf("Stack *(NULL)\n");
+        fprintf(out, "Stack *(NULL)\n");
     } else {
-        printf("Stack *(%p) %s {\n",
+        fprintf(out, "Stack *(%p) %s {\n",
             (const void*)stack,
             VALIDATE_STACK(stack) ? "VALID" : "INVALID"
         );
 
         // stack
-        printf("  stack     = *(%p) [", (const void*)stack->stack);
-        for (size_t i = 0; i < MIN(stack->size, (size_t)10); ++i) {
-            fprintf(out, "0x%02X ", stack->stack[i]);
+        printf("  stack = *(%p) [\n", (const void*)stack->stack);
+        for (size_t i = 0; i < MIN(stack->size, (size_t)64); ++i) {
+            printf("    [%zu] = 0x%02X\n", i, stack->stack[i]);
         }
-        printf(" ...]\n");
+        printf("    ...\n");
+        printf("  ]\n");
         
         // stack_top
-        printf("  stack_top = *(%p) [", (const void*)stack->stack_top);
-        size_t n = MIN(stack->size - (size_t)(stack->stack_top - stack->stack), (size_t)10);
+        size_t stack_top_index = (size_t)(stack->stack_top - stack->stack);
+        printf("  stack_top = *(%p) stack + %zu [\n", (const void*)stack->stack_top, stack_top_index);
+        size_t n = MIN(stack->size - (size_t)(stack->stack_top - stack->stack), (size_t)4);
         for (size_t i = 0; i < n; ++i) {
-            fprintf(out, "0x%02X ", stack->stack_top[i]);
+            printf("    [%zu] = 0x%02X\n", stack_top_index + i, stack->stack_top[i]);
         }
-        printf(" ...]\n");
+        printf("    ...\n");
+        printf("  ]\n");
 
         // size
-        printf("  size     = %zu\n", stack->size);
+        printf("  size = %zu\n", stack->size);
         printf("}\n");
     }
 
@@ -115,66 +118,70 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
 #undef printf
 }
 
-void pushByteOnStack(Stack* stack, uint8_t byte) {
-    ASSERT_STACK(stack);
+#define DEFINE_PUSH_POP_GET_SET_OPERATIONS(type_name, type)        \
+    void push ## type_name ## OnStack(Stack* stack, type value) {  \
+        ASSERT_STACK(stack);                                       \
+                                                                   \
+        ensureFreeSpace(stack, sizeof(type));                      \
+        *((type*)stack->stack_top) = value;                        \
+        stack->stack_top += sizeof(type);                          \
+                                                                   \
+        ASSERT_STACK(stack);                                       \
+    }                                                              \
+                                                                   \
+    type pop ## type_name ## FromStack(Stack* stack) {             \
+        ASSERT_STACK(stack);                                       \
+                                                                   \
+        stack->stack_top -= sizeof(type);                          \
+        type value = *((type*)stack->stack_top);                   \
+        shrinkIfNeeded(stack);                                     \
+                                                                   \
+        ASSERT_STACK(stack);                                       \
+        return value;                                              \
+    }                                                              \
+                                                                   \
+    void set ## type_name ## OnStack(                              \
+        Stack* stack,                                              \
+        size_t address,                                            \
+        type value                                                 \
+    ) {                                                            \
+        ASSERT_STACK(stack);                                       \
+                                                                   \
+        if (address + sizeof(type) >=                              \
+            (size_t)(stack->stack_top - stack->stack)              \
+        ) {                                                        \
+            /* TODO: error */                                      \
+            assert(false);                                         \
+        }                                                          \
+                                                                   \
+        *(type*)(stack->stack + address) = value;                  \
+                                                                   \
+        ASSERT_STACK(stack);                                       \
+    }                                                              \
+                                                                   \
+    type get ## type_name ## FromStack(                            \
+        const Stack* stack,                                        \
+        size_t address                                             \
+    ) {                                                            \
+        ASSERT_STACK(stack);                                       \
+                                                                   \
+        if (address + sizeof(type) >=                              \
+            (size_t)(stack->stack_top - stack->stack)              \
+        ) {                                                        \
+            /* TODO: error */                                      \
+            assert(false);                                         \
+        }                                                          \
+                                                                   \
+        ASSERT_STACK(stack);                                       \
+        return *(type*)(stack->stack + address);                   \
+    } static_assert(true, "require semicolon")
 
-    ensureFreeSpace(stack, 1);
-    *(stack->stack_top++) = byte;
+DEFINE_PUSH_POP_GET_SET_OPERATIONS(Byte,    uint8_t);
+DEFINE_PUSH_POP_GET_SET_OPERATIONS(Int,     int32_t);
+DEFINE_PUSH_POP_GET_SET_OPERATIONS(Float,   double);
+DEFINE_PUSH_POP_GET_SET_OPERATIONS(Address, size_t);
 
-    ASSERT_STACK(stack);
-}
-
-void pushIntOnStack(Stack* stack, int32_t value) {
-    ASSERT_STACK(stack);
-
-    ensureFreeSpace(stack, sizeof(int32_t));
-    *((int32_t*)stack->stack_top) = value;
-    stack->stack_top += sizeof(int32_t);
-
-    ASSERT_STACK(stack);
-}
-
-void pushFloatOnStack(Stack* stack, double value) {
-    ASSERT_STACK(stack);
-
-    ensureFreeSpace(stack, sizeof(double));
-    *((double*)stack->stack_top) = value;
-    stack->stack_top += sizeof(double);
-
-    ASSERT_STACK(stack);
-}
-
-uint8_t popByteFromStack(Stack* stack) {
-    ASSERT_STACK(stack);
-
-    uint8_t value = *(--stack->stack_top);
-    shrinkIfNeeded(stack);
-
-    ASSERT_STACK(stack);
-    return value;
-}
-
-int32_t popIntFromStack(Stack* stack) {
-    ASSERT_STACK(stack);
-
-    stack->stack_top -= sizeof(int32_t);
-    int32_t value = *((int32_t*)stack->stack_top);
-    shrinkIfNeeded(stack);
-
-    ASSERT_STACK(stack);
-    return value;
-}
-
-double popFloatFromStack(Stack* stack) {
-    ASSERT_STACK(stack);
-
-    stack->stack_top -= sizeof(double);
-    double value = *((double*)stack->stack_top);
-    shrinkIfNeeded(stack);
-
-    ASSERT_STACK(stack);
-    return value;
-}
+#undef DEFINE_PUSH_POP_GET_SET_OPERATIONS
 
 
 // ┌─────────────────────────────────┐
