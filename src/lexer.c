@@ -404,6 +404,11 @@ static Token identifier(Lexer* lexer) {
         advance(lexer);
     } while (isAlphaNumeric(c = current(lexer)));
 
+    if (c == '_') {
+        ASSERT_LEXER(lexer);
+        return makeErrorToken(lexer, "Identifier can't include '_'. Use '-'.");
+    }
+
     if (c == '-') {
         ASSERT_LEXER(lexer);
         return makeErrorToken(lexer, "An identifier can't end with a '-'.");

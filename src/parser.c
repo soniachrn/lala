@@ -261,6 +261,8 @@ static Token forceMatch(Parser* parser, TokenType expected) {
 
     if (!match(parser, expected)) {
         // TODO: error
+        printf("Expected %s, got %s\n", tokenTypeName(expected), tokenTypeName(peekNext(parser)));
+        dumpParser(parser);
         assert(false);
     }
 
