@@ -158,12 +158,12 @@ void dumpParser(const Parser* parser) {
 void fdumpParser(FILE* out, const Parser* parser, int padding) {
     assert(out);
 
-#define printf(...)                             \
-    {                                           \
-        if (padding > 0) {                      \
-            fprintf(out, "%*s", padding, "  "); \
-        }                                       \
-        fprintf(out, __VA_ARGS__);              \
+#define printf(...)                                \
+    {                                              \
+        if (padding > 0) {                         \
+            fprintf(out, "%*s", padding * 2, " "); \
+        }                                          \
+        fprintf(out, __VA_ARGS__);                 \
     }
 
     if (!parser) {

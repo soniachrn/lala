@@ -98,12 +98,12 @@ void dumpLexer(const Lexer* lexer) {
 void fdumpLexer(FILE* out, const Lexer* lexer, int padding) {
     assert(out);
 
-#define printf(...)                             \
-    {                                           \
-        if (padding > 0) {                      \
-            fprintf(out, "%*s", padding, "  "); \
-        }                                       \
-        fprintf(out, __VA_ARGS__);              \
+#define printf(...)                                \
+    {                                              \
+        if (padding > 0) {                         \
+            fprintf(out, "%*s", padding * 2, " "); \
+        }                                          \
+        fprintf(out, __VA_ARGS__);                 \
     }
 
     if (!lexer) {

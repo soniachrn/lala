@@ -73,12 +73,12 @@ void dumpStack(const Stack* stack) {
 void fdumpStack(FILE* out, const Stack* stack, int padding) {
     assert(out);
 
-#define printf(...)                             \
-    {                                           \
-        if (padding > 0) {                      \
-            fprintf(out, "%*s", padding, "  "); \
-        }                                       \
-        fprintf(out, __VA_ARGS__);              \
+#define printf(...)                                \
+    {                                              \
+        if (padding > 0) {                         \
+            fprintf(out, "%*s", padding * 2, " "); \
+        }                                          \
+        fprintf(out, __VA_ARGS__);                 \
     }
 
 #define MIN(a, b) (a < b ? a : b)

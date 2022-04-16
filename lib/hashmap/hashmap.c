@@ -93,12 +93,12 @@ void dumpHashMap(const HashMap* map) {
 void fdumpHashMap(FILE* out, const HashMap* map, int padding) {
     assert(out);
 
-#define printf(...)                             \
-    {                                           \
-        if (padding > 0) {                      \
+#define printf(...)                                \
+    {                                              \
+        if (padding > 0) {                         \
             fprintf(out, "%*s", padding * 2, " "); \
-        }                                       \
-        fprintf(out, __VA_ARGS__);              \
+        }                                          \
+        fprintf(out, __VA_ARGS__);                 \
     }
 
     if (!map) {
