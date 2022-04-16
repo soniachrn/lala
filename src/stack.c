@@ -91,10 +91,18 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
             VALIDATE_STACK(stack) ? "VALID" : "INVALID"
         );
 
+        // size
+        printf("  size = %zu\n", stack->size);
+
         // stack
         printf("  stack = *(%p) [\n", (const void*)stack->stack);
-        for (size_t i = 0; i < MIN(stack->size, (size_t)64); ++i) {
-            printf("    [%zu] = 0x%02X\n", i, stack->stack[i]);
+        for (size_t i = 0; i < MIN(stack->size, (size_t)64);) {
+            printf("    %.2zu:", i);
+            for (size_t j = 0; j < 4; ++j) {
+                printf(" 0x%02X", stack->stack[i]);
+                i += 1;
+            }
+            printf("\n");
         }
         printf("    ...\n");
         printf("  ]\n");
@@ -103,14 +111,17 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
         size_t stack_top_index = (size_t)(stack->stack_top - stack->stack);
         printf("  stack_top = *(%p) stack + %zu [\n", (const void*)stack->stack_top, stack_top_index);
         size_t n = MIN(stack->size - (size_t)(stack->stack_top - stack->stack), (size_t)4);
-        for (size_t i = 0; i < n; ++i) {
-            printf("    [%zu] = 0x%02X\n", stack_top_index + i, stack->stack_top[i]);
+        for (size_t i = 0; i < n;) {
+            printf("    %.2zu:", stack_top_index + i);
+            for (size_t j = 0; j < 4; ++j) {
+                printf(" 0x%02X", stack->stack_top[i]);
+                i += 1;
+            }
+            printf("\n");
         }
         printf("    ...\n");
         printf("  ]\n");
 
-        // size
-        printf("  size = %zu\n", stack->size);
         printf("}\n");
     }
 

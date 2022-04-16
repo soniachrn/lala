@@ -173,17 +173,13 @@ void fdumpParser(FILE* out, const Parser* parser, int padding) {
             (const void*)parser,
             VALIDATE_PARSER(parser) ? "VALID" : "INVALID"
         );
+        printf("  previous = %s\n", tokenTypeName(parser->previous.type));
+        printf("  next = %s\n", tokenTypeName(parser->next.type));
+        printf("  did_read_next = %s\n", parser->did_read_next ? "true" : "false");
         printf("  lexer = ");
         fdumpLexer(out, parser->lexer, padding + 1);
         printf("  chunk = ");
         fdumpStack(out, parser->chunk, padding + 1);
-        printf("\n")
-
-        printf("  previous = %s\n", tokenTypeName(parser->previous.type));
-        printf("  next = %s\n", tokenTypeName(parser->next.type));
-        printf("  did_read_next = %s\n", parser->did_read_next ? "true" : "false");
-        printf("\n");
-
         printf("  scope = ");
         fdumpScope(out, parser->scope, padding + 1);
         printf("}\n");

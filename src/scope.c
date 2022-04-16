@@ -76,14 +76,18 @@ void fdumpScope(FILE* out, const Scope* scope, int padding) {
     }
 
     if (!scope) {
-        printf("Scope *(NULL)\n");
+        fprintf(out, "Scope *(NULL)\n");
     } else {
-        printf("Scope *(%p) %s {\n",
+        fprintf(out, "Scope *(%p) %s {\n",
             (const void*)scope,
             VALIDATE_SCOPE(scope) ? "VALID" : "INVALID"
         );
 
-        printf("  parent = *(%p)\n", (const void*)scope->parent);
+        if (scope->parent) {
+            printf("  parent = *(%p)\n", (const void*)scope->parent);
+        } else {
+            printf("  parent = NULL\n");
+        }
         printf("  stack_top = %zu\n", scope->stack_top);
         
         printf("  symbol_table = ");

@@ -28,7 +28,7 @@
         exit(1);                                          \
     }
 
-#define IS_TOMBSTONE(entry) (entry->key == NULL && entry->key_length == 1)
+#define IS_TOMBSTONE(entry) ((entry)->key == NULL && (entry)->key_length == 1)
 
 
 // ┌──────────────────────────────┐
@@ -91,10 +91,45 @@ void dumpHashMap(const HashMap* map) {
 }
 
 void fdumpHashMap(FILE* out, const HashMap* map, int padding) {
-    (void)out;
-    (void)map;
-    (void)padding;
-    fprintf(out, "\n");
+    assert(out);
+
+#define printf(...)                             \
+    {                                           \
+        if (padding > 0) {                      \
+            fprintf(out, "%*s", padding * 2, " "); \
+        }                                       \
+        fprintf(out, __VA_ARGS__);              \
+    }
+
+    if (!map) {
+        fprintf(out, "HashMap *(NULL)\n");
+    } else {
+        fprintf(out, "HashMap *(%p) %s {\n",
+            (const void*)map,
+            VALIDATE_HASH_MAP(map) ? "VALID" : "INVALID"
+        );
+        printf("  count = %zu\n", map->count);
+        printf("  capacity = %zu\n", map->capacity);
+        printf("  entries[%zu/%zu] = *(%p) [\n", map->count, map->capacity, (const void*)map->entries);
+        for (size_t i = 0; i < map->capacity; ++i) {
+            if (IS_TOMBSTONE(map->entries + i)) {
+                printf("    [%.2zu] = TOMBSTONE\n", i);
+            } else if (map->entries[i].key == NULL) {
+                printf("    [%.2zu] = EMPTY\n", i);
+            } else {
+                printf("    [%.2zu] = ('%.*s' #%u: %zu)\n", 
+                    i,
+                    (int)map->entries[i].key_length, map->entries[i].key,
+                    map->entries[i].hash,
+                    map->entries[i].value
+                );
+            }
+        }
+        printf("  ]\n");
+        printf("}\n");
+    }
+
+#undef printf
 }
 
 bool storeInHashMap(HashMap* map, const char* key, size_t key_length, size_t value) {
