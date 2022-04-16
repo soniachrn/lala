@@ -176,7 +176,7 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
     ) {                                                            \
         ASSERT_STACK(stack);                                       \
                                                                    \
-        if (address + sizeof(type) >=                              \
+        if (address + sizeof(type) >                               \
             (size_t)(stack->stack_top - stack->stack)              \
         ) {                                                        \
             /* TODO: error */                                      \

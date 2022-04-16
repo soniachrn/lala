@@ -165,8 +165,8 @@ void interpret(VM* vm) {
             case OP_CONCATENATE: assert(false); // TODO: Not implemented yet
 
             // Cast
-            case OP_CAST_FLOAT_TO_INT: assert(false); // TODO: Not implemented yet
-            case OP_CAST_INT_TO_FLOAT: assert(false); // TODO: Not implemented yet
+            case OP_CAST_FLOAT_TO_INT: PUSH_INT((int32_t)POP_FLOAT()); break;
+            case OP_CAST_INT_TO_FLOAT: PUSH_FLOAT((double)POP_INT()); break;
 
 #define GET_FROM_STACK_OP(type_name)   \
     push ## type_name ## OnStack(      \

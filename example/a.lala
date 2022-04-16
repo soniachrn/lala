@@ -1,0 +1,4 @@
+var i: int = 12
+var f: float = 3.0
+print (i / f:int):float * 0.3
+

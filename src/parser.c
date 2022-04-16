@@ -321,6 +321,7 @@ static void parseVariable(Parser* parser) {
         ValueType initializer_value_type = parseExpression(parser);
         if (value_type != initializer_value_type) {
             // TODO: error
+            printf("Initializer expression's type doesn't match the variable's type.\n");
             assert(false);
         }
     }

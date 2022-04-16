@@ -31,7 +31,7 @@ add_subdirectory(lib/hashmap)
 
 project(Lala)
 
-add_library(Lala
+add_library(LalaLib
     src/lexer.c
     src/parser.c
     src/scope.c
@@ -40,12 +40,22 @@ add_library(Lala
     src/value_type.c
     src/vm.c
 )
-target_link_libraries(Lala PUBLIC
+target_link_libraries(LalaLib PUBLIC
     HashMap
 )
-target_include_directories(Lala PUBLIC
+target_include_directories(LalaLib PUBLIC
     "lib/debug"
     "lib/hashmap"
+    "src"
+)
+
+add_executable(lala
+    src/main.c
+)
+target_link_libraries(lala PUBLIC
+    LalaLib
+)
+target_include_directories(lala PUBLIC
     "src"
 )
 
@@ -56,7 +66,7 @@ add_executable(LalaTest
 )
 target_link_libraries(LalaTest PUBLIC
     Cut
-    Lala
+    LalaLib
 )
 target_include_directories(LalaTest PUBLIC
     "lib/cut"
