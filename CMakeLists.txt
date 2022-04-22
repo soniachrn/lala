@@ -44,6 +44,7 @@ target_link_libraries(LalaLib PUBLIC
     HashMap
 )
 target_include_directories(LalaLib PUBLIC
+    "lib/ccf"
     "lib/debug"
     "lib/hashmap"
     "src"

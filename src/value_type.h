@@ -10,6 +10,7 @@
 // └───────┘
 
 typedef enum {
+    VALUE_INVALID,
     VALUE_BOOL,
     VALUE_INT,
     VALUE_FLOAT,

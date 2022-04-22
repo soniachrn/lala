@@ -60,6 +60,7 @@ static void resizeHashMap(HashMap* map, size_t new_capacity);
 // └──────────────────────────┘
 
 uint32_t calculateHash(const char* string, size_t length) {
+    // FNV-1a hash function
     uint32_t hash = 2166136261u;
     for (size_t i = 0; i < length; ++i) {
         hash ^= (uint8_t)string[i];
@@ -266,7 +267,7 @@ static HashMapEntry* findEntry(
     }
 }
 
-void growIfNeeded(HashMap* map) {
+static void growIfNeeded(HashMap* map) {
     ASSERT_HASH_MAP(map);
 
     if (map->count > map->capacity * HASH_MAP_MAX_LOAD_FACTOR) {
@@ -276,7 +277,7 @@ void growIfNeeded(HashMap* map) {
     ASSERT_HASH_MAP(map);
 }
 
-void shrinkIfNeeded(HashMap* map) {
+static void shrinkIfNeeded(HashMap* map) {
     ASSERT_HASH_MAP(map);
 
     if (map->capacity > INITIAL_HASH_MAP_SIZE && 
@@ -288,12 +289,13 @@ void shrinkIfNeeded(HashMap* map) {
     ASSERT_HASH_MAP(map);
 }
 
-void resizeHashMap(HashMap* map, size_t new_capacity) {
+static void resizeHashMap(HashMap* map, size_t new_capacity) {
     ASSERT_HASH_MAP(map);
 
     HashMapEntry* old_entries = map->entries;
     size_t old_capacity = map->capacity;
 
+    // Reallocate
     map->entries = calloc(new_capacity, sizeof(HashMapEntry));
     if (!map->entries) {
         // TODO: error
@@ -302,6 +304,7 @@ void resizeHashMap(HashMap* map, size_t new_capacity) {
     map->capacity = new_capacity;
     map->count = 0;
 
+    // Refill
     for (size_t i = 0; i < old_capacity; ++i) {
         if (old_entries[i].key != NULL) {
             storeInHashMapKnownHash(

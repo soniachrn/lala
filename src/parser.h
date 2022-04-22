@@ -25,6 +25,9 @@ typedef struct {
     Token previous;
     Token next;
     bool did_read_next;
+
+    bool panic_mode;
+    bool had_error;
     
     Scope* scope;
 } Parser;

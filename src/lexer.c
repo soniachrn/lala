@@ -49,8 +49,8 @@ static bool match(Lexer* lexer, char c);
 static void startNewToken(Lexer* lexer);
 static Token makeToken(const Lexer* lexer, TokenType type);
 static Token advanceAndMakeToken(Lexer* lexer, TokenType type);
-static Token makeErrorToken(const Lexer* lexer, const char* message);
-static void fillErrorToken(const Lexer* lexer, Token* error_token, const char* message);
+static Token makeErrorToken(Lexer* lexer, const char* message);
+static void fillErrorToken(Lexer* lexer, Token* error_token, const char* message);
 
 static bool isLetter(char c);
 static bool isDigit(char c);
@@ -77,6 +77,7 @@ void initLexer(Lexer* lexer, const char* input) {
     lexer->line = 1;
     lexer->token_start_symbol = 1;
     lexer->symbol = 1;
+    lexer->lines[1] = input;
 
     ASSERT_LEXER(lexer);
 }
@@ -122,6 +123,21 @@ void fdumpLexer(FILE* out, const Lexer* lexer, int padding) {
     }
 
 #undef printf
+}
+
+uint8_t fprintLine(FILE* out, Lexer* lexer, uint16_t line) {
+    ASSERT_LEXER(lexer);
+
+    assert(line <= lexer->line);
+    const char* line_start = lexer->lines[line];
+    const char* line_break = strchr(line_start, '\n');
+    if (line_break) {
+        fprintf(out, "%.*s\n", (int)(line_break - line_start), line_start);
+        return (uint8_t)(line_break - line_start);
+    } else {
+        fprintf(out, "%s\n", line_start);
+        return (uint8_t)strlen(line_start);
+    }
 }
 
 Token readToken(Lexer* lexer) {
@@ -216,6 +232,7 @@ static void advance(Lexer* lexer) {
     if (current(lexer) == '\n') {
         lexer->line += 1;
         lexer->symbol = 1;
+        lexer->lines[lexer->line] = lexer->current + 1;
     } else {
         lexer->symbol += 1;
     }
@@ -266,7 +283,7 @@ static Token advanceAndMakeToken(Lexer* lexer, TokenType type) {
     return makeToken(lexer, type);
 }
 
-static Token makeErrorToken(const Lexer* lexer, const char* message) {
+static Token makeErrorToken(Lexer* lexer, const char* message) {
     ASSERT_LEXER(lexer);
 
     Token token;
@@ -278,10 +295,14 @@ static Token makeErrorToken(const Lexer* lexer, const char* message) {
     token.line = lexer->line;
     token.symbol = lexer->token_start_symbol;
 
+    if (!isAtEnd(lexer)) {
+        advance(lexer);
+    }
+
     return token;
 }
 
-static void fillErrorToken(const Lexer* lexer, Token* error_token, const char* message) {
+static void fillErrorToken(Lexer* lexer, Token* error_token, const char* message) {
     ASSERT_LEXER(lexer);
 
     error_token->type = TOKEN_ERROR;
@@ -291,6 +312,10 @@ static void fillErrorToken(const Lexer* lexer, Token* error_token, const char* m
     error_token->length = (uint8_t)length;
     error_token->line = lexer->line;
     error_token->symbol = lexer->token_start_symbol;
+
+    if (!isAtEnd(lexer)) {
+        advance(lexer);
+    }
 }
 
 static bool isLetter(char c) {

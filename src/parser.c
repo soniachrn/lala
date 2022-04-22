@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include "ccf.h"
 #include "debug.h"
 
 
@@ -42,7 +43,16 @@
 //  Parser manipulation
 // —————————————————————
 
+// Reads the next token, but doesn't consume it.
 static void readNext(Parser* parser);
+
+// Return the last consumed token.
+static Token previous(const Parser* parser);
+
+static Token next(Parser* parser);
+
+// Returns the type of the next token without consuming it.
+static TokenType peekNext(Parser* parser);
 
 // Advances and returns the consumed token's type.
 static TokenType advance(Parser* parser);
@@ -55,11 +65,8 @@ static bool match(Parser* parser, TokenType expected);
 // the matched token. Else, results in an error.
 static Token forceMatch(Parser* parser, TokenType expected);
 
-// Return the last consumed token.
-static Token previous(const Parser* parser);
-
-// Returns the type of the next token without consuming it.
-static TokenType peekNext(Parser* parser);
+// Skips tokens until encounters a declration or a statement start.
+static void synchronize(Parser* parser);
 
 
 // —————————
@@ -102,7 +109,9 @@ static bool validateOperandType(
     ValueType expected_operand_types[4]
 );
 
-static bool validateOperatorTypes(
+static void validateOperatorTypes(
+    Parser* parser,
+    Token expression_start_token,
     TokenType operator,
     ValueType left_operand_type,
     ValueType right_operand_type
@@ -137,6 +146,8 @@ void initParser(Parser* parser, Lexer* lexer, Stack* chunk) {
     parser->lexer = lexer;
     parser->chunk = chunk;
     parser->did_read_next = false;
+    parser->panic_mode = false;
+    parser->had_error = false;
     parser->scope = createScope(NULL);
 
     ASSERT_PARSER(parser);
@@ -220,14 +231,101 @@ ValueType parseExpression(Parser* parser) {
 //  Parser manipulation
 // —————————————————————
 
+#define error(parser, error_kind, start_token, end_token, ...)  \
+    {                                                           \
+        if (!parser->panic_mode) {                              \
+            parser->panic_mode = true;                          \
+            parser->had_error  = true;                          \
+                                                                \
+            /* Print error title and position. */               \
+            fprintf(                                            \
+                stderr,                                         \
+                CCF_RED("%s error at %d:%d:\n"),                \
+                error_kind,                                     \
+                start_token.line,                               \
+                start_token.symbol                              \
+            );                                                  \
+                                                                \
+            /* Print error message */                           \
+            fprintf(stderr, __VA_ARGS__);                       \
+            fprintf(stderr, "\n");                              \
+                                                                \
+            /* Print source code line */                        \
+            uint8_t line_length = fprintLine(                   \
+                stderr,                                         \
+                parser->lexer,                                  \
+                start_token.line                                \
+            );                                                  \
+                                                                \
+                                                                \
+            /* Highlight the error tokens */                    \
+            fprintf(stderr, "%*s", start_token.symbol - 1, ""); \
+            uint8_t highlight_length;                           \
+            if (start_token.line == end_token.line) {           \
+                highlight_length = (                            \
+                    (uint8_t)(end_token.start -                 \
+                    start_token.start) +                        \
+                    end_token.length                            \
+                );                                              \
+                if (end_token.type == TOKEN_ERROR) {            \
+                    highlight_length = (uint8_t)(               \
+                        parser->lexer->current -                \
+                        parser->lexer->token_start              \
+                    );                                          \
+                }                                               \
+            } else {                                            \
+                highlight_length = (                            \
+                    line_length -                               \
+                    (start_token.symbol - 1)                    \
+                );                                              \
+            }                                                   \
+            for (uint8_t i = 0; i < highlight_length; ++i) {    \
+                fputc('~', stderr);                             \
+            }                                                   \
+            fputc('\n', stderr);                                \
+        }                                                       \
+    }
+
+#define errorAt(parser, error_kind, token, ...)  error(  parser, error_kind, token, token,     __VA_ARGS__)
+#define errorAtPrevious(parser, error_kind, ...) errorAt(parser, error_kind, previous(parser), __VA_ARGS__)
+#define errorAtNext(    parser, error_kind, ...) errorAt(parser, error_kind, next(parser),     __VA_ARGS__)
+
 static void readNext(Parser* parser) {
     ASSERT_PARSER(parser);
     assert(!parser->did_read_next);
 
-    parser->next = readToken(parser->lexer);
     parser->did_read_next = true;
 
+    parser->next = readToken(parser->lexer);
+    while (parser->next.type == TOKEN_ERROR) {
+        errorAtNext(parser, "Lexical", "%.*s", parser->next.length, parser->next.start);
+        parser->next = readToken(parser->lexer);
+    }
+
     ASSERT_PARSER(parser);
+}
+
+static Token previous(const Parser* parser) {
+    ASSERT_PARSER(parser);
+    return parser->previous;
+}
+
+static Token next(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    if (!parser->did_read_next) {
+        readNext(parser);
+    }
+    return parser->next;
+}
+
+static TokenType peekNext(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    if (!parser->did_read_next) {
+        readNext(parser);
+    }
+    return parser->next.type;
 }
 
 static TokenType advance(Parser* parser) {
@@ -238,6 +336,10 @@ static TokenType advance(Parser* parser) {
         parser->did_read_next = false;
     } else {
         parser->previous = readToken(parser->lexer);
+        while (parser->previous.type == TOKEN_ERROR) {
+            errorAtPrevious(parser, "Lexical", "%.*s", parser->previous.length, parser->previous.start);
+            parser->previous = readToken(parser->lexer);
+        }
     }
 
     ASSERT_PARSER(parser);
@@ -260,27 +362,36 @@ static Token forceMatch(Parser* parser, TokenType expected) {
     ASSERT_PARSER(parser);
 
     if (!match(parser, expected)) {
-        // TODO: error
-        printf("Expected %s, got %s\n", tokenTypeName(expected), tokenTypeName(peekNext(parser)));
-        dumpParser(parser);
-        assert(false);
+        errorAtNext(
+            parser,
+            "Syntactic",
+            "Expected %s, got %s.",
+            tokenTypeName(expected),
+            tokenTypeName(peekNext(parser))
+        );
     }
 
     return previous(parser);
 }
 
-static Token previous(const Parser* parser) {
+static void synchronize(Parser* parser) {
     ASSERT_PARSER(parser);
-    return parser->previous;
-}
+    assert(parser->panic_mode);
 
-static TokenType peekNext(Parser* parser) {
-    ASSERT_PARSER(parser);
+    parser->panic_mode = false;
 
-    if (!parser->did_read_next) {
-        readNext(parser);
+    while (true) {
+        switch (peekNext(parser)) {
+            case TOKEN_VAR:
+            case TOKEN_PRINT:
+            case TOKEN_END:
+                ASSERT_PARSER(parser);
+                return;
+            default:
+                advance(parser);
+                break;
+        }
     }
-    return parser->next.type;
 }
 
 
@@ -294,6 +405,10 @@ static void parseDeclaration(Parser* parser) {
     switch (peekNext(parser)) {
         case TOKEN_VAR:   parseVariable(parser);  break;
         default:          parseStatement(parser); break;
+    }
+
+    if (parser->panic_mode) {
+        synchronize(parser);
     }
 
     ASSERT_PARSER(parser);
@@ -313,18 +428,30 @@ static void parseVariable(Parser* parser) {
         case TOKEN_INT:   value_type = VALUE_INT;   break;
         case TOKEN_FLOAT: value_type = VALUE_FLOAT; break;
         default:
-            // not supported yet
-            dumpParser(parser);
-            assert(false);
+            errorAtPrevious(
+                parser,
+                "Syntactic",
+                "Only bool, int and float types are supported at the moment. Got %s.",
+                tokenTypeName(previous(parser).type)
+            );
+            return;
     }
 
     // Initialization
     if (match(parser, TOKEN_EQUAL)) {
+        Token expression_start_token = next(parser);
         ValueType initializer_value_type = parseExpression(parser);
         if (value_type != initializer_value_type) {
-            // TODO: error
-            printf("Initializer expression's type doesn't match the variable's type.\n");
-            assert(false);
+            error(
+                parser,
+                "Semantic",
+                expression_start_token,
+                previous(parser),
+                "Variable type (%s) and initializer expression type (%s) don't match.",
+                valueTypeName(value_type),
+                valueTypeName(initializer_value_type)
+            );
+            return;
         }
     }
     // Default value
@@ -341,7 +468,8 @@ static void parseVariable(Parser* parser) {
                 pushOpCodeOnStack(parser->chunk, OP_PUSH_FLOAT);
                 pushFloatOnStack(parser->chunk, (double)0);
                 break;
-            default: assert(false); // not supported yet
+            default:
+                assert(false);
         }
     }
 
@@ -351,8 +479,15 @@ static void parseVariable(Parser* parser) {
         identifier_token.length,
         value_type
     )) {
-        // TODO: error
-        assert(false);
+        errorAt(
+            parser,
+            "Semantic",
+            identifier_token,
+            "Could not declare variable %.*s."
+            "Either the name is already taken or max variable number in scope is reached.",
+            identifier_token.length,
+            identifier_token.start
+        );
     }
 
     ASSERT_PARSER(parser);
@@ -362,9 +497,16 @@ static void parseStatement(Parser* parser) {
     ASSERT_PARSER(parser);
 
     switch (peekNext(parser)) {
-        case TOKEN_PRINT: parsePrint(parser);     break;
+        case TOKEN_PRINT: parsePrint(parser);           break;
         case TOKEN_IDENTIFIER: parseAssignment(parser); break;
-        default: assert(false); // Not implemented yet or error
+        default:
+            errorAtNext(
+                parser,
+                "Syntactic",
+                "Unexpected token on statement start. Expected TOKEN_PRINT, TOKEN_IDENTIFIER, got %s",
+                tokenTypeName(peekNext(parser))
+            );
+            break;
     }
 
     ASSERT_PARSER(parser);
@@ -374,13 +516,22 @@ static void parsePrint(Parser* parser) {
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_PRINT);
+    Token expression_start_token = next(parser);
     ValueType value_type = parseExpression(parser);
     switch (value_type) {
         case VALUE_BOOL:  pushOpCodeOnStack(parser->chunk, OP_PRINT_BOOL);  break;
         case VALUE_INT:   pushOpCodeOnStack(parser->chunk, OP_PRINT_INT);   break;
         case VALUE_FLOAT: pushOpCodeOnStack(parser->chunk, OP_PRINT_FLOAT); break;
         default:
-            assert(false);
+            error(
+                parser,
+                "Semantic",
+                expression_start_token,
+                previous(parser),
+                "Print statement supports BOOL, INT, FLOAT arguments, got %s",
+                valueTypeName(value_type)
+            );
+            break;
     }
 
     ASSERT_PARSER(parser);
@@ -391,6 +542,7 @@ static void parseAssignment(Parser* parser) {
 
     Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
     forceMatch(parser, TOKEN_EQUAL);
+    Token expression_start_token = next(parser);
     ValueType expression_value_type = parseExpression(parser);
 
     Variable variable;
@@ -402,13 +554,28 @@ static void parseAssignment(Parser* parser) {
     );
 
     if (!found_variable) {
-        // TODO: error
-        assert(false);
+        errorAt(
+            parser,
+            "Semantic",
+            identifier_token,
+            "Assignment to undeclared variable %.*s.",
+            identifier_token.length,
+            identifier_token.start
+        );
+        return;
     }
 
     if (variable.type != expression_value_type) {
-        // TODO: error;
-        assert(false);
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "Variable type (%s) and expression type (%s) don't match in an assignment.",
+            valueTypeName(variable.type),
+            valueTypeName(expression_value_type)
+        );
+        return;
     }
 
     OpCode op_code;
@@ -416,7 +583,8 @@ static void parseAssignment(Parser* parser) {
         case VALUE_BOOL:  op_code = OP_SET_BYTE_ON_STACK;  break;
         case VALUE_INT:   op_code = OP_SET_INT_ON_STACK;   break;
         case VALUE_FLOAT: op_code = OP_SET_FLOAT_ON_STACK; break;
-        default: assert(false); // TODO: error
+        default:
+            assert(false);
     }
 
     pushOpCodeOnStack(parser->chunk, op_code);
@@ -428,12 +596,13 @@ static void parseAssignment(Parser* parser) {
 static ValueType parseOr(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    Token expression_start_token = next(parser);
     ValueType value_type_l = parseAnd(parser);
 
     while (match(parser, TOKEN_OR)) {
         ValueType value_type_r = parseAnd(parser);
 
-        validateOperatorTypes(TOKEN_OR, value_type_l, value_type_r);
+        validateOperatorTypes(parser, expression_start_token, TOKEN_OR, value_type_l, value_type_r);
         emitOpCodesForTokenAndValueTypesCombination(parser, 2, TOKEN_OR, value_type_l);
     }
 
@@ -444,12 +613,13 @@ static ValueType parseOr(Parser* parser) {
 static ValueType parseAnd(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    Token expression_start_token = next(parser);
     ValueType value_type_l = parseComparison(parser);
     
     while (match(parser, TOKEN_AND)) {
         ValueType value_type_r = parseComparison(parser);
 
-        validateOperatorTypes(TOKEN_AND, value_type_l, value_type_r);
+        validateOperatorTypes(parser, expression_start_token, TOKEN_AND, value_type_l, value_type_r);
         emitOpCodesForTokenAndValueTypesCombination(parser, 2, TOKEN_AND, value_type_l);
     }
 
@@ -460,6 +630,7 @@ static ValueType parseAnd(Parser* parser) {
 static ValueType parseComparison(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    Token expression_start_token = next(parser);
     ValueType value_type_l = parseTerm(parser);
     
     if (match(parser, TOKEN_EQUAL_EQUAL)       ||
@@ -472,7 +643,7 @@ static ValueType parseComparison(Parser* parser) {
         TokenType operator_token_type = previous(parser).type;
         ValueType value_type_r = parseTerm(parser);
 
-        validateOperatorTypes(operator_token_type, value_type_l, value_type_r);
+        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l, value_type_r);
         emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l);
 
         value_type_l = VALUE_BOOL;
@@ -485,13 +656,14 @@ static ValueType parseComparison(Parser* parser) {
 static ValueType parseTerm(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    Token expression_start_token = next(parser);
     ValueType value_type_l = parseFactor(parser);
     
     while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
         TokenType operator_token_type = previous(parser).type;
         ValueType value_type_r = parseFactor(parser);
 
-        validateOperatorTypes(operator_token_type, value_type_l, value_type_r);
+        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l, value_type_r);
         emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l);
     }
 
@@ -502,6 +674,7 @@ static ValueType parseTerm(Parser* parser) {
 static ValueType parseFactor(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    Token expression_start_token = next(parser);
     ValueType value_type_l = parsePrefix(parser);
     
     while (
@@ -512,7 +685,7 @@ static ValueType parseFactor(Parser* parser) {
         TokenType operator_token_type = previous(parser).type;
         ValueType value_type_r = parsePrefix(parser);
 
-        validateOperatorTypes(operator_token_type, value_type_l, value_type_r);
+        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l, value_type_r);
         emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l);
     }
 
@@ -533,7 +706,13 @@ static ValueType parsePrefix(Parser* parser) {
     ValueType value_type = parsePostfix(parser);
 
     if (had_prefix_operator) {
-        validateOperatorTypes(operator_token_type, value_type, value_type);
+        if (operator_token_type == TOKEN_MINUS) {
+            ValueType expected[4] = { VALUE_INT, VALUE_FLOAT };
+            validateOperandType(value_type, expected);
+        } else if (operator_token_type == TOKEN_EXCLAMATION) {
+            ValueType expected[4] = { VALUE_BOOL };
+            validateOperandType(value_type, expected);
+        }
         emitOpCodesForTokenAndValueTypesCombination(parser, 1, operator_token_type, value_type);
     }
 
@@ -556,16 +735,24 @@ static ValueType parsePostfix(Parser* parser) {
             
             // Member access
             case TOKEN_DOT:
-                // TODO: structs not implemented yet
-                assert(false);
+                errorAtPrevious(
+                    parser,
+                    "Syntactic",
+                    "Structures not implemented yet."
+                );
+                return VALUE_INVALID;
                 // TODO: 1. check type is obj
                 //       2. eat identifier
                 //       3. push member access op
 
             // Call
             case TOKEN_LPAREN:
-                // TODO: functions not implemented yet
-                assert(false);
+                errorAtPrevious(
+                    parser,
+                    "Syntactic",
+                    "Functions not implemented yet."
+                )
+                return VALUE_INVALID;
                 // TODO: 1. check type is func
                 //       2. eat argument list
                 //       3. check signature
@@ -573,8 +760,12 @@ static ValueType parsePostfix(Parser* parser) {
             
             // Subscript
             case TOKEN_LBRACKET:
-                // TODO: arrays and maps are not implemented yet
-                assert(false);
+                errorAtPrevious(
+                    parser,
+                    "Syntactic",
+                    "Arrays and maps are not implemented yet."
+                );
+                return VALUE_INVALID;
                 // TODO: 1. check type is arr or map
                 //       2. eat index
                 //       3. push subscript op
@@ -600,12 +791,21 @@ static ValueType parsePostfix(Parser* parser) {
                     }
                     
                     case TOKEN_STRING:
-                        // TODO: not implemented yet
-                        assert(false);
+                        errorAtPrevious(
+                            parser,
+                            "Syntactic",
+                            "Cast to string is not implemented yet."
+                        );
+                        return VALUE_INVALID;
 
                     default:
-                        // TODO: error
-                        assert(false);
+                        errorAtPrevious(
+                            parser,
+                            "Syntactic",
+                            "Unexpected token for type cast: %s.",
+                            tokenTypeName(previous(parser).type)
+                        );
+                        return VALUE_INVALID;
                 }
                 break;
 
@@ -668,8 +868,14 @@ static ValueType parsePrimary(Parser* parser) {
             );
 
             if (!found_variable) {
-                // TODO: error
-                assert(false);
+                errorAtPrevious(
+                    parser,
+                    "Semantic",
+                    "Access to undeclared variable %.*s.",
+                    previous(parser).length,
+                    previous(parser).start
+                );
+                return VALUE_INVALID;
             }
 
             OpCode op_code;
@@ -677,7 +883,8 @@ static ValueType parsePrimary(Parser* parser) {
                 case VALUE_BOOL:  op_code = OP_GET_BYTE_FROM_STACK;  break;
                 case VALUE_INT:   op_code = OP_GET_INT_FROM_STACK;   break;
                 case VALUE_FLOAT: op_code = OP_GET_FLOAT_FROM_STACK; break;
-                default: assert(false); // TODO: error
+                default:
+                    assert(false);
             }
 
             pushOpCodeOnStack(parser->chunk, op_code);
@@ -688,12 +895,20 @@ static ValueType parsePrimary(Parser* parser) {
         }
         
         case TOKEN_LBRACKET:
-            // TODO: array; not implemented yet
-            assert(false);
+            errorAtPrevious(
+                parser,
+                "Syntactic",
+                "Arrays not implemented yet."
+            );
+            return VALUE_INVALID;
         
         case TOKEN_LBRACE:
-            // TODO: map; not implemented yet
-            assert(false);
+            errorAtPrevious(
+                parser,
+                "Syntactic",
+                "Maps not implemented yet."
+            );
+            return VALUE_INVALID;
         
         case TOKEN_LPAREN:
             value_type = parseExpression(parser);
@@ -701,10 +916,13 @@ static ValueType parsePrimary(Parser* parser) {
             break;
         
         default:
-            // TODO: error
-            printf("%s\n", tokenTypeName(previous(parser).type));
-            dumpParser(parser);
-            assert(false);
+            errorAtPrevious(
+                parser,
+                "Syntactic",
+                "Unexpected token %s while parsing a primary value.",
+                tokenTypeName(previous(parser).type)
+            );
+            return VALUE_INVALID;
     }
 
     ASSERT_PARSER(parser);
@@ -742,7 +960,7 @@ OperatorTypeRules operator_type_rules[] = {
     [TOKEN_STAR]              = { IF,   IF,   true  },
     [TOKEN_SLASH]             = { IF,   IF,   true  },
     [TOKEN_PERCENT]           = { IF,   I,    false },
-    [TOKEN_EXCLAMATION]       = { B,    B,    true },
+    [TOKEN_EXCLAMATION]       = { B,    B,    true  },
 };
 
 #undef IFS
@@ -770,25 +988,44 @@ static bool validateOperandType(
     return true;
 }
 
-static bool validateOperatorTypes(
+static void validateOperatorTypes(
+    Parser* parser,
+    Token expression_start_token,
     TokenType operator,
     ValueType left_operand_type,
     ValueType right_operand_type
 ) {
+    ASSERT_PARSER(parser);
+
     OperatorTypeRules rules = operator_type_rules[operator];
 
     if (!validateOperandType(left_operand_type,  rules.left_operand_expected_types) ||
         !validateOperandType(right_operand_type, rules.right_operand_expected_types)
-    ){
-        return false;
+    ) {
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "One of the operands has an invalid type for operator %s",
+            tokenTypeName(operator)
+        );
     }
 
     if (rules.types_have_to_match && left_operand_type != right_operand_type) {
-        // TODO: error
-        return false;
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "Expected %s's operands to be of the same type, but the types differ: %s and %s.",
+            tokenTypeName(operator),
+            valueTypeName(left_operand_type),
+            valueTypeName(right_operand_type)
+        );
     }
 
-    return true;
+    ASSERT_PARSER(parser);
 }
 
 
