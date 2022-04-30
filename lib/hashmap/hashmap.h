@@ -48,10 +48,28 @@ void freeHashMap(HashMap* map);
 void dumpHashMap(const HashMap* map);
 void fdumpHashMap(FILE* out, const HashMap* map, int padding);
 
-bool storeInHashMap(HashMap* map, const char* key, size_t key_length, size_t value);
-bool getFromHashMap(const HashMap* map, const char* key, size_t key_length, size_t* value);
-bool removeFromHashMap(HashMap* map, const char* key, size_t key_length);
-bool hashMapContains(const HashMap* map, const char* key, size_t key_length);
+bool storeInHashMap(
+    HashMap* map,
+    const char* key,
+    size_t key_length,
+    size_t value
+);
+bool getFromHashMap(
+    const HashMap* map,
+    const char* key,
+    size_t key_length,
+    size_t* value
+);
+bool removeFromHashMap(
+    HashMap* map,
+    const char* key,
+    size_t key_length
+);
+bool hashMapContains(
+    const HashMap* map,
+    const char* key,
+    size_t key_length
+);
 
 
 #endif

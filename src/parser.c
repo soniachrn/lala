@@ -93,13 +93,6 @@ static ValueType parsePostfix   (Parser* parser);
 static ValueType parsePrimary   (Parser* parser);
 
 
-// —————————
-//  Utility
-// —————————
-
-static uint8_t addStringConstant(const char* start, uint8_t length) { (void)start; (void)length; return 0; }
-
-
 // —————————————————————
 //  Operator type rules 
 // —————————————————————
@@ -149,6 +142,7 @@ void initParser(Parser* parser, Lexer* lexer, Stack* chunk) {
     parser->panic_mode = false;
     parser->had_error = false;
     parser->scope = createScope(NULL);
+    parser->constants.count = 0;
 
     ASSERT_PARSER(parser);
 }
@@ -424,14 +418,15 @@ static void parseVariable(Parser* parser) {
     ValueType value_type;
     forceMatch(parser, TOKEN_COLON);
     switch (advance(parser)) {
-        case TOKEN_BOOL:  value_type = VALUE_BOOL;  break;
-        case TOKEN_INT:   value_type = VALUE_INT;   break;
-        case TOKEN_FLOAT: value_type = VALUE_FLOAT; break;
+        case TOKEN_BOOL:   value_type = VALUE_BOOL;   break;
+        case TOKEN_INT:    value_type = VALUE_INT;    break;
+        case TOKEN_FLOAT:  value_type = VALUE_FLOAT;  break;
+        case TOKEN_STRING: value_type = VALUE_STRING; break;
         default:
             errorAtPrevious(
                 parser,
                 "Syntactic",
-                "Only bool, int and float types are supported at the moment. Got %s.",
+                "Only bool, int, float and string types are supported at the moment. Got %s.",
                 tokenTypeName(previous(parser).type)
             );
             return;
@@ -522,13 +517,14 @@ static void parsePrint(Parser* parser) {
         case VALUE_BOOL:  pushOpCodeOnStack(parser->chunk, OP_PRINT_BOOL);  break;
         case VALUE_INT:   pushOpCodeOnStack(parser->chunk, OP_PRINT_INT);   break;
         case VALUE_FLOAT: pushOpCodeOnStack(parser->chunk, OP_PRINT_FLOAT); break;
+        case VALUE_STRING: pushOpCodeOnStack(parser->chunk, OP_PRINT_STRING); break;
         default:
             error(
                 parser,
                 "Semantic",
                 expression_start_token,
                 previous(parser),
-                "Print statement supports BOOL, INT, FLOAT arguments, got %s",
+                "Print statement supports BOOL, INT, FLOAT, STRING arguments, got %s",
                 valueTypeName(value_type)
             );
             break;
@@ -790,13 +786,27 @@ static ValueType parsePostfix(Parser* parser) {
                         break;
                     }
                     
-                    case TOKEN_STRING:
-                        errorAtPrevious(
-                            parser,
-                            "Syntactic",
-                            "Cast to string is not implemented yet."
-                        );
-                        return VALUE_INVALID;
+                    case TOKEN_STRING: {
+                        ValueType expected[4] = { VALUE_BOOL, VALUE_INT, VALUE_FLOAT };
+                        validateOperandType(value_type, expected);
+
+                        switch (value_type) {
+                            case VALUE_BOOL:
+                                pushOpCodeOnStack(parser->chunk, OP_CAST_BOOL_TO_STRING);
+                                break;
+                            case VALUE_INT:
+                                pushOpCodeOnStack(parser->chunk, OP_CAST_INT_TO_STRING);
+                                break;
+                            case VALUE_FLOAT:
+                                pushOpCodeOnStack(parser->chunk, OP_CAST_FLOAT_TO_STRING);
+                                break;
+                            default:
+                                assert(false);
+                        }
+
+                        value_type = VALUE_STRING;
+                        break;
+                    }
 
                     default:
                         errorAtPrevious(
@@ -851,12 +861,17 @@ static ValueType parsePrimary(Parser* parser) {
             break;
         }
         
-        case TOKEN_STRING_VALUE:
-            pushOpCodeOnStack(parser->chunk, OP_ACCESS_CONSTANT_TABLE);
-            uint8_t constant_table_address = addStringConstant(previous(parser).start, previous(parser).length);
-            pushByteOnStack(parser->chunk, constant_table_address);
+        case TOKEN_STRING_VALUE: {
+            uint8_t string_constant_i = addConstant(
+                &parser->constants,
+                previous(parser).length - 2,
+                (const uint8_t*)previous(parser).start + 1
+            );
+            pushOpCodeOnStack(parser->chunk, OP_LOAD_CONSTANT);
+            pushByteOnStack(parser->chunk, string_constant_i);
             value_type = VALUE_STRING;
             break;
+        }
         
         case TOKEN_IDENTIFIER: {
             Variable variable;
@@ -880,9 +895,10 @@ static ValueType parsePrimary(Parser* parser) {
 
             OpCode op_code;
             switch (variable.type) {
-                case VALUE_BOOL:  op_code = OP_GET_BYTE_FROM_STACK;  break;
-                case VALUE_INT:   op_code = OP_GET_INT_FROM_STACK;   break;
-                case VALUE_FLOAT: op_code = OP_GET_FLOAT_FROM_STACK; break;
+                case VALUE_BOOL:   op_code = OP_GET_BYTE_FROM_STACK;    break;
+                case VALUE_INT:    op_code = OP_GET_INT_FROM_STACK;     break;
+                case VALUE_FLOAT:  op_code = OP_GET_FLOAT_FROM_STACK;   break;
+                case VALUE_STRING: op_code = OP_GET_ADDRESS_FROM_STACK; break;
                 default:
                     assert(false);
             }

@@ -32,7 +32,10 @@ add_subdirectory(lib/hashmap)
 project(Lala)
 
 add_library(LalaLib
+    src/constant.c
+    src/heap.c
     src/lexer.c
+    src/op_code.c
     src/parser.c
     src/scope.c
     src/stack.c

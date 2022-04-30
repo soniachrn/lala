@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "constant.h"
 #include "lexer.h"
 #include "op_code.h"
 #include "scope.h"
@@ -30,6 +31,7 @@ typedef struct {
     bool had_error;
     
     Scope* scope;
+    Constants constants;
 } Parser;
 
 

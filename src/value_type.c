@@ -26,6 +26,7 @@ size_t valueTypeSize(ValueType value_type) {
         case VALUE_BOOL:   return sizeof(uint8_t);
         case VALUE_INT:    return sizeof(uint32_t);
         case VALUE_FLOAT:  return sizeof(double);
+        case VALUE_STRING: return sizeof(size_t);
         default: assert(false);
     }
 }

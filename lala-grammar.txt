@@ -97,11 +97,7 @@ block           : LBRACE declaration RBRACE ;
 # Expression
 expression      : and ;
 or              : and (OR and)* ;
-and             : equality (AND equality)* ;
-equality        : comparison (equality-op comparison)? ;
-equality-op     : EQUAL-EQUAL
-                | EXCLAMATION-EQUAL
-                ;
+and             : comparison (AND comparison)* ;
 comparison      : term (comparison-op term)? ;
 comparison-op   : EQUAL-EQUAL
                 | EXCLAMATION-EQUAL

@@ -1,0 +1,192 @@
+
+(*
+   Lala grammar in EBNF ISO/IEC 14977 : 1996(E).
+  
+   This grammar uses pcre2 special sequence extension to ISO 14977.
+   pcre2 special sequence starts with "pcre2 ", then contains a valid
+   PCRE2 regular expression and ends with a " ".
+   For example, special sequence 
+     ?pcre2 [a-z] ?
+   represents any string that matches PCRE2 regular expression "[a-z]".
+*)
+
+
+(* Program *)
+program       = {declaration} ;
+
+
+(* Declaration *)
+declaration   = variable
+              | function
+              | structure
+              | enum
+              | statement
+              ;
+variable      = (VAR | CONST), typed id, EQUAL, expression ;
+function      = FUNCTION, ID, parameters, type spec, statement ;
+parameters    = LPAREN, [variable, {COMMA, variable}, [COMMA]], RPAREN ;
+structure     = STRUCTURE, ID, LBRACE, {typed id}, RBRACE ;
+enum          = ENUM, ID, LBRACE, {ID}, RBRACE;
+typed id      = ID, type spec ;
+
+
+(* Statement *)
+statement     = print
+              | assert
+              | assignment
+              | if
+              | while
+              | do while
+              | for
+              | function call
+              | CONTINUE
+              | BREAK
+              | RETURN
+              | block
+              ;
+print         = PRINT, expression ;
+assert        = ASSERT, expression ;
+assignment    = postfix, assign op, expression ;  (* Compiler should force this postfix to end with one of: primary, subscript, member access *)
+assign op     = EQUAL
+              | PLUS EQUAL
+              | MINUS EQUAL
+              | STAR EQUAL
+              | SLASH EQUAL
+              | PERCENT EQUAL
+              ;
+if            = IF, expression, statement, [else] ;
+else          = ELSE statement ;
+while         = WHILE, expression, statement ;
+do while      = DO, statement, WHILE, expression ;
+for           = FOR, ID, IN, expression, statement ;
+function call = postfix ;  (* Compiler should force this postfix to end with a call *)
+block         = LBRACE, {declaration}, RBRACE ;
+
+
+(* Expression *)
+expression    = or ;
+or            = and, {OR, and} ;
+and           = comparison, {AND, comparison} ;
+comparison    = term, [comparison op, term];
+comparison op = EQUAL EQUAL
+              | EXCLAMATION EQUAL
+              | GREATER EQUAL
+              | LESS EQUAL
+              | GREATER
+              | LESS
+              ;
+term          = factor, {term op, factor} ;
+term op       = PLUS
+              | MINUS
+              ;
+factor        = prefix, {factor op, prefix} ;
+factor op     = STAR
+              | SLASH
+              | PRECENT
+              ;
+prefix        = [MINUS | EXCLAMATION], postfix ;
+postfix       = primary, {postfix op} ;
+postfix op    = DOT, ID  (* member access *)
+              | call
+              | LBRACKET, expression, RBRACKET  (* subscript *)
+              | type cast
+              ;
+call          = LPAREN, [argument, {COMMA, argument}, [COMMA]], RPAREN ;
+argument      = [ID, EQUAL], expression ;
+primary       = TRUE
+              | FALSE
+              | INTEGER VALUE
+              | FLOAT VALUE
+              | STRING VALUE
+              | ID
+              | array
+              | map
+              | LPAREN expression RPAREN
+              ;
+array         = LBRACKET, [expression, {COMMA, expression}, [COMMA]], RBRACKET ;
+map           = LBRACE, [map item, {COMMA, map item}, [COMMA]], RBRACE ;
+map item      = expression, COLON, expression ;
+
+
+(* Type *)
+type spec     = COLON, type ;
+type cast     = COLON, castable type ;
+type          = castable type
+              | BOOL
+              | ID
+              | LBRACKET type RBRACKET
+              | LBRACE type COLON type RBRACE
+              ;
+castable type = INT
+              | FLOAT
+              | STRING
+              ;
+
+
+(* Tokens *)
+
+COLON             = ":" ;
+COMMA             = "," ;
+DOT               = "." ;
+EQUAL             = "=" ;
+EQUAL EQUAL       = "==" ;
+EXCLAMATION       = "!" ;
+EXCLAMATION EQUAL = "!=" ;
+GREATER           = ">" ;
+GREATER EQUAL     = ">=" ;
+LBRACE            = "{" ;
+LBRACKET          = "[" ;
+LESS              = "<" ;
+LESS EQUAL        = "<=" ;
+LPAREN            = "(" ;
+MINUS             = "-" ;
+MINUS EQUAL       = "-=" ;
+PERCENT           = "%" ;
+PERCENT EQUAL     = "%=" ;
+PLUS              = "+" ;
+PLUS EQUAL        = "+=" ;
+RBRACE            = "}" ;
+RBRACKET          = "]" ;
+RPAREN            = ")" ;
+SLASH             = "/" ;
+SLASH EQUAL       = "/=" ;
+STAR              = "*" ;
+STAR EQUAL        = "*=" ;
+
+AND               = "and" ;
+ASSERT            = "assert" ;
+BOOL              = "bool" ;
+BREAK             = "break" ;
+CONTINUE          = "continue" ;
+ELSE              = "else" ;
+ENUM              = "enum" ;
+FALSE             = "false" ;
+FLOAT             = "float" ;
+FOR               = "for" ;
+FUNCTION          = "function" ;
+IF                = "if" ;
+IN                = "in" ;
+INT               = "int" ;
+MUTABLE           = "mutable" ;
+OR                = "or" ;
+PREDICATE         = "predicate" ;
+PRINT             = "print" ;
+RETURN            = "return" ;
+STRING            = "string" ;
+STRUCTURE         = "structure" ;
+TRUE              = "true" ;
+VAR               = "var" ;
+WHILE             = "while" ;
+
+INTEGER VALUE     = ?pcre2 ([1-9][0-9]*|0) ? ;
+FLOAT VALUE       = INTEGER VALUE, ?pcre2 \.[0-9]+ ? ;
+STRING VALUE      = ?pcre2 '([^'\\]|\\[trn'\\])*' ? ;
+ID                = ?pcre2 [a-zA-Z] ?, [?pcre2 [a-zA-Z0-9-]*[a-zA-Z0-9] ?] ;
+
+(* Ignored *)
+COMMENT           = ?pcre2 \|[^\n]*\n ?
+                  | ?pcre2 /-([^-]|-[^/])*-/ ?
+                  ;
+WHITESPACE        : ?pcre2 [ \r\t\n]* ? ;
+
+

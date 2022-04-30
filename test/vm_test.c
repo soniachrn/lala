@@ -20,23 +20,25 @@
         }                                                         \
     }
 
-#define TEST_VM(name, bytecode, expected_stack)             \
-    TEST(name) {                                            \
-        uint8_t source_unterminated[] = bytecode;           \
-                                                            \
-        const size_t length = sizeof(source_unterminated) / \
-                              sizeof(uint8_t) + 1;          \
-        uint8_t source[length] = bytecode;                  \
-        source[length - 1] = '\0';                          \
-                                                            \
-        VM vm;                                              \
-        initVM(&vm, source);                                \
-                                                            \
-        interpret(&vm);                                     \
-                                                            \
-        EXPECT_STACK_STATE(vm, ARRAY(expected_stack));      \
-                                                            \
-        freeVM(&vm);                                        \
+#define TEST_VM(name, bytecode, expected_stack)                 \
+    TEST(name) {                                                \
+        uint8_t source_unterminated[] = bytecode;               \
+                                                                \
+        const size_t length = sizeof(source_unterminated) /     \
+                              sizeof(uint8_t) + 1;              \
+        uint8_t source[length] = bytecode;                      \
+        source[length - 1] = '\0';                              \
+                                                                \
+        VM vm;                                                  \
+        Constants constants;                                    \
+        constants.count = 0;                                    \
+        initVM(&vm, source, strlen((char*)source), &constants); \
+                                                                \
+        interpret(&vm);                                         \
+                                                                \
+        EXPECT_STACK_STATE(vm, ARRAY(expected_stack));          \
+                                                                \
+        freeVM(&vm);                                            \
     } static_assert(true, "require semicolon")
 
 
