@@ -1050,13 +1050,32 @@ static ValueType parsePrimary(Parser* parser) {
             break;
         }
         
-        case TOKEN_LBRACKET:
-            errorAtPrevious(
-                parser,
-                "Syntactic",
-                "Arrays not implemented yet."
-            );
-            return VALUE_INVALID;
+        case TOKEN_LBRACKET: {
+            ValueType array_elements_type = VALUE_INVALID;
+            size_t elements_count = 0;
+
+            while (!match(parser, TOKEN_RBRACKET) && peekNext(parser) != TOKEN_END) {
+                Token expression_start_token = next(parser);
+                ValueType current_array_element_type = parseExpression(parser);
+                if (current_array_element_type != array_elements_type) {
+                    error(
+                        parser,
+                        "Semantic",
+                        expression_start_token,
+                        previous(parser),
+                        "Invalid array element type %s in an array of %s",
+                        valueTypeName(current_array_element_type),
+                        valueTypeName(array_elements_type)
+                    );
+                    return VALUE_INVALID;
+                }
+                if (peekNext(parser) != TOKEN_RBRACKET) {
+                    forceMatch(parser, TOKEN_COMMA);
+                }
+                elements_count += 1;
+            }
+            return VALUE_ARRAY;
+        }
         
         case TOKEN_LBRACE:
             errorAtPrevious(
