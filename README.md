@@ -149,7 +149,7 @@ print(person)
 
 | Приоритет     | Оператор  | Название         | Типы операндов                      |
 | ------------- | --------- | ---------------- | ----------------------------------- |
-| 1. postfix    | `a.`      | member access    | object                              | 
+| 1. postfix    | `a.b`     | member access    | object                              | 
 |               | `a()`     | function call    | function                            |
 |               | `a[]`     | subscript        | array, map                          |
 |               | `a: b`    | type cast        | int-float, float-int, any-string    |
