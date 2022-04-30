@@ -486,7 +486,7 @@ static void parseVariable(Parser* parser) {
             parser,
             "Semantic",
             identifier_token,
-            "Could not declare variable %.*s."
+            "Could not declare variable %.*s. "
             "Either the name is already taken or max variable number in scope is reached.",
             identifier_token.length,
             identifier_token.start
@@ -720,9 +720,11 @@ static void parseBlock(Parser* parser) {
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_LBRACE);
-    while (!match(parser, TOKEN_RBRACE)) {
+    parser->scope = createScope(parser->scope);
+    while (!match(parser, TOKEN_RBRACE) && peekNext(parser) != TOKEN_END) {
         parseDeclaration(parser);
     }
+    parser->scope = deleteScope(parser->scope);
 
     ASSERT_PARSER(parser);
 }

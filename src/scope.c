@@ -12,6 +12,7 @@
 #define VALIDATE_SCOPE(scope)                           \
     (                                                   \
         scope &&                                        \
+        scope != scope->parent &&                       \
         scope->variables_count < MAX_VARIABLES_IN_SCOPE \
     )
 
@@ -152,10 +153,10 @@ bool accessVariableInScope(
 
     size_t variable_index;
     bool found = false;
-    for (const Scope* i = scope; !found && i != NULL; i = scope->parent) {
-        found = getFromHashMap(&scope->symbol_table, name, name_length, &variable_index);
+    for (const Scope* i = scope; !found && i != NULL; i = i->parent) {
+        found = getFromHashMap(&i->symbol_table, name, name_length, &variable_index);
         if (found) {
-            *variable = scope->variables[variable_index];
+            *variable = i->variables[variable_index];
         }
     }
 
