@@ -66,10 +66,15 @@ const char* opCodeName(OpCode op_code) {
         case OP_PRINT_FLOAT:             return "print float";
         case OP_PRINT_STRING:            return "print string";
 
+        // Jump
+        case OP_JUMP:                    return "jump";
+        case OP_JUMP_IF_TRUE:            return "jump if true";
+        case OP_JUMP_IF_FALSE:           return "jump if false";
+
         // Empty
         case OP_EMPTY:                   return "empty";
 
-        default:                         return "invalid";
+        default:                         return "INVALID";
     }
 }
 

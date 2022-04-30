@@ -44,6 +44,7 @@ const char* tokenTypeName(TokenType type) {
         case TOKEN_BOOL:               return "TOKEN_BOOL";
         case TOKEN_BREAK:              return "TOKEN_BREAK";
         case TOKEN_CONTINUE:           return "TOKEN_CONTINUE";
+        case TOKEN_DO:                 return "TOKEN_DO";
         case TOKEN_ELSE:               return "TOKEN_ELSE";
         case TOKEN_ENUM:               return "TOKEN_ENUM";
         case TOKEN_FALSE:              return "TOKEN_FALSE";

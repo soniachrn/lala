@@ -482,6 +482,7 @@ static TokenType identifierTokenType(const Lexer* lexer) {
 
     switch (lexer->token_start[0]) {
         case 'c': return tryMatchKeyword(lexer, "continue",  TOKEN_CONTINUE);
+        case 'd': return tryMatchKeyword(lexer, "do",        TOKEN_DO);
         case 'm': return tryMatchKeyword(lexer, "mutable",   TOKEN_MUTABLE);
         case 'o': return tryMatchKeyword(lexer, "or",        TOKEN_OR);
         case 'r': return tryMatchKeyword(lexer, "return",    TOKEN_RETURN);

@@ -284,6 +284,25 @@ void interpret(VM* vm) {
                 break;
             }
 
+            // Jump
+            case OP_JUMP:
+                vm->ip = vm->source + readAddressFromSource(vm);
+                break;
+            case OP_JUMP_IF_TRUE: {
+                size_t address = readAddressFromSource(vm);
+                if (POP_BYTE()) {
+                    vm->ip = vm->source + address;
+                }
+                break;
+            }
+            case OP_JUMP_IF_FALSE: {
+                size_t address = readAddressFromSource(vm);
+                if (!POP_BYTE()) {
+                    vm->ip = vm->source + address;
+                }
+                break;
+            }
+
             default: assert(false); // TODO: error
         }
     }

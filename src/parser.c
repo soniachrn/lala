@@ -78,9 +78,13 @@ static void parseDeclaration(Parser* parser);
 static void parseVariable(Parser* parser);
 
 // Statement
-static void parseStatement(Parser* parser);
-static void parsePrint(Parser* parser);
+static void parseStatement (Parser* parser);
+static void parsePrint     (Parser* parser);
 static void parseAssignment(Parser* parser);
+static void parseIf        (Parser* parser);
+static void parseWhile     (Parser* parser);
+static void parseDoWhile   (Parser* parser);
+static void parseBlock     (Parser* parser);
 
 // Expression
 static ValueType parseOr        (Parser* parser);
@@ -378,6 +382,10 @@ static void synchronize(Parser* parser) {
         switch (peekNext(parser)) {
             case TOKEN_VAR:
             case TOKEN_PRINT:
+            case TOKEN_IF:
+            case TOKEN_WHILE:
+            case TOKEN_DOT:
+            case TOKEN_LBRACE:
             case TOKEN_END:
                 ASSERT_PARSER(parser);
                 return;
@@ -492,13 +500,17 @@ static void parseStatement(Parser* parser) {
     ASSERT_PARSER(parser);
 
     switch (peekNext(parser)) {
-        case TOKEN_PRINT: parsePrint(parser);           break;
+        case TOKEN_PRINT:      parsePrint(parser);      break;
         case TOKEN_IDENTIFIER: parseAssignment(parser); break;
+        case TOKEN_IF:         parseIf(parser);         break;
+        case TOKEN_WHILE:      parseWhile(parser);      break;
+        case TOKEN_DO:         parseDoWhile(parser);    break;
+        case TOKEN_LBRACE:     parseBlock(parser);      break;
         default:
             errorAtNext(
                 parser,
                 "Syntactic",
-                "Unexpected token on statement start. Expected TOKEN_PRINT, TOKEN_IDENTIFIER, got %s",
+                "Unexpected token on statement start. Expected TOKEN_PRINT, TOKEN_IDENTIFIER, TOKEN_IF, TOKEN_WHILE, TOKEN_DO, got %s",
                 tokenTypeName(peekNext(parser))
             );
             break;
@@ -585,6 +597,132 @@ static void parseAssignment(Parser* parser) {
 
     pushOpCodeOnStack(parser->chunk, op_code);
     pushAddressOnStack(parser->chunk, variable.address_on_stack);
+
+    ASSERT_PARSER(parser);
+}
+
+static void parseIf(Parser* parser){
+    ASSERT_PARSER(parser);
+
+    forceMatch(parser, TOKEN_IF);
+    
+    // Parse condition expression
+    Token expression_start_token = next(parser);
+    ValueType expression_value_type = parseExpression(parser);
+
+    if (expression_value_type != VALUE_BOOL) {
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "Condition expression in an if statement is %s, but has to be bool.",
+            valueTypeName(expression_value_type)
+        );
+        return;
+    }
+
+    // Jump out of if if condition is false; fill jump address later
+    pushOpCodeOnStack(parser->chunk, OP_JUMP_IF_FALSE);
+    size_t after_if_address_position_in_chunk = stackSize(parser->chunk);
+    pushAddressOnStack(parser->chunk, (size_t)0);
+
+    // Parse if body
+    parseStatement(parser);
+
+    // Fill jump out address
+    size_t after_if_address = stackSize(parser->chunk);
+    setAddressOnStack(parser->chunk, after_if_address_position_in_chunk, after_if_address);
+
+    ASSERT_PARSER(parser);
+}
+
+static void parseWhile(Parser* parser){
+    ASSERT_PARSER(parser);
+
+    forceMatch(parser, TOKEN_WHILE);
+
+    // Save iteration start location
+    size_t iteration_start_address = stackSize(parser->chunk);
+
+    // Parse condition expression
+    Token expression_start_token = next(parser);
+    ValueType expression_value_type = parseExpression(parser);
+
+    if (expression_value_type != VALUE_BOOL) {
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "Condition expression in a while statement is %s, but has to be bool.",
+            valueTypeName(expression_value_type)
+        );
+        return;
+    }
+
+    // Jump out of while if condition is false; fill jump address later
+    pushOpCodeOnStack(parser->chunk, OP_JUMP_IF_FALSE);
+    size_t after_while_address_position_in_chunk = stackSize(parser->chunk);
+    pushAddressOnStack(parser->chunk, (size_t)0);
+
+    // Parse body
+    parseStatement(parser);
+
+    // Jump to the start of while statement after an iteration
+    pushOpCodeOnStack(parser->chunk, OP_JUMP);
+    pushAddressOnStack(parser->chunk, iteration_start_address);
+
+    // Fill jump out address
+    size_t after_while_address = stackSize(parser->chunk);
+    setAddressOnStack(parser->chunk, after_while_address_position_in_chunk, after_while_address);
+
+    ASSERT_PARSER(parser);
+}
+
+static void parseDoWhile(Parser* parser){
+    ASSERT_PARSER(parser);
+
+    forceMatch(parser, TOKEN_DO);
+
+    // Save iteration start location
+    size_t iteration_start_address = stackSize(parser->chunk);
+
+    // Parse body
+    parseStatement(parser);
+
+    forceMatch(parser, TOKEN_WHILE);
+
+    // Parse condition expression
+    Token expression_start_token = next(parser);
+    ValueType expression_value_type = parseExpression(parser);
+
+    if (expression_value_type != VALUE_BOOL) {
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "Condition expression in a while statement is %s, but has to be bool.",
+            valueTypeName(expression_value_type)
+        );
+        return;
+    }
+
+    // Jump to the start of do-while statement after an iteration, if the condition is true
+    pushOpCodeOnStack(parser->chunk, OP_JUMP_IF_TRUE);
+    pushAddressOnStack(parser->chunk, iteration_start_address);
+
+    ASSERT_PARSER(parser);
+}
+
+static void parseBlock(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    forceMatch(parser, TOKEN_LBRACE);
+    while (!match(parser, TOKEN_RBRACE)) {
+        parseDeclaration(parser);
+    }
 
     ASSERT_PARSER(parser);
 }

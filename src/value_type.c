@@ -12,10 +12,10 @@
 const char* valueTypeName(ValueType value_type) {
     switch (value_type) {
         case VALUE_INVALID: return "INVALID TYPE";
-        case VALUE_BOOL:    return "BOOL";
-        case VALUE_INT:     return "INT";
-        case VALUE_FLOAT:   return "FLOAT";
-        case VALUE_STRING:  return "STRING";
+        case VALUE_BOOL:    return "bool";
+        case VALUE_INT:     return "int";
+        case VALUE_FLOAT:   return "float";
+        case VALUE_STRING:  return "string";
     }
     
     return "INVALID_VALUE_TYPE";

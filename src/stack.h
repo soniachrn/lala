@@ -10,8 +10,8 @@
 // │ Macros │
 // └────────┘
 
-#define STACK_INITIAL_SIZE 128
-#define STACK_MAX_SIZE (1024 * 1024)  /* 1MB */
+#define STACK_INITIAL_CAPACITY 128
+#define STACK_MAX_CAPACITY (1024 * 1024)  /* 1MB */
 
 
 // ┌───────┐
@@ -21,7 +21,7 @@
 typedef struct {
     uint8_t* stack;
     uint8_t* stack_top;
-    size_t   size;
+    size_t   capacity;
 } Stack;
 
 
@@ -33,6 +33,8 @@ void initStack(Stack* stack);
 void freeStack(Stack* stack);
 void dumpStack(const Stack* stack);
 void fdumpStack(FILE* out, const Stack* stack, int padding);
+
+size_t stackSize(const Stack* stack);
 
 void pushByteOnStack(   Stack* stack, uint8_t value);
 void pushIntOnStack(    Stack* stack, int32_t value);
