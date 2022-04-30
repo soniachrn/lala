@@ -6,10 +6,18 @@
 #include <string.h>
 
 
+// ┌───────────────────────┐
+// │ Constants definitions │
+// └───────────────────────┘
+
 ReferenceRule REFERENCE_RULE_PLAIN;
 Object OBJECT_STRING_TRUE  = { &REFERENCE_RULE_PLAIN, 4, (uint8_t*)"true",  NULL };
 Object OBJECT_STRING_FALSE = { &REFERENCE_RULE_PLAIN, 5, (uint8_t*)"false", NULL };
 
+
+// ┌──────────────────────────┐
+// │ Function implementations │
+// └──────────────────────────┘
 
 void initHeap(Heap* heap) {
     assert(heap);

@@ -32,7 +32,7 @@
         VM vm;                                                  \
         Constants constants;                                    \
         constants.count = 0;                                    \
-        initVM(&vm, source, strlen((char*)source), &constants); \
+        initVM(&vm, source, length - 1, &constants);            \
                                                                 \
         interpret(&vm);                                         \
                                                                 \

@@ -6,6 +6,10 @@
 #include <stdio.h>
 
 
+// ┌───────┐
+// │ Types │
+// └───────┘
+
 struct Object {
     struct Object* reference_rule;
     size_t   size;
@@ -21,10 +25,18 @@ typedef struct {
 } Heap;
 
 
+// ┌────────────────────────┐
+// │ Constants declarations │
+// └────────────────────────┘
+
 extern ReferenceRule REFERENCE_RULE_PLAIN;
 extern Object OBJECT_STRING_TRUE;
 extern Object OBJECT_STRING_FALSE;
 
+
+// ┌───────────────────────┐
+// │ Function declarations │
+// └───────────────────────┘
 
 void initHeap(Heap* heap);
 void freeHeap(Heap* heap);
