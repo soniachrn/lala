@@ -90,6 +90,14 @@ void __cutRegisterTest(const char* testName, __CutTestFunction testFunction);
             to_string((b)) \
     )
 
+#define EXPECT_EQUALS_COMP_TOSTR(a, b, compare, to_string) \
+    EXPECT_INTERNAL(compare(a, b), \
+            "Expected " CCF_YELLOW(CCF_BOLD(#a " (%s)")) \
+            " to be equal to " CCF_BLUE(CCF_BOLD(#b " (%s)")), \
+            to_string((a)), \
+            to_string((b)) \
+    )
+
 #define EXPECT_NOT_EQUALS(a, b) \
     EXPECT_INTERNAL((a) != (b), \
             "Expected " CCF_YELLOW(CCF_BOLD(#a)) \

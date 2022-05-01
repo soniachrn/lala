@@ -10,9 +10,8 @@
 // │ Constants definitions │
 // └───────────────────────┘
 
-ReferenceRule REFERENCE_RULE_PLAIN;
-Object OBJECT_STRING_TRUE  = { &REFERENCE_RULE_PLAIN, 4, (uint8_t*)"true",  NULL };
-Object OBJECT_STRING_FALSE = { &REFERENCE_RULE_PLAIN, 5, (uint8_t*)"false", NULL };
+Object OBJECT_STRING_TRUE  = { REFERENCE_RULE_PLAIN, NULL, 4, (uint8_t*)"true",  NULL };
+Object OBJECT_STRING_FALSE = { REFERENCE_RULE_PLAIN, NULL, 5, (uint8_t*)"false", NULL };
 
 
 // ┌──────────────────────────┐
@@ -50,16 +49,17 @@ void fdumpHeap(FILE* out, Heap* heap, int padding) {
 
 Object* allocateEmptyObject(
     Heap* heap,
-    ReferenceRule* reference_rule,
+    ReferenceRule reference_rule,
+    Object* custom_reference_rule,
     size_t size
 ) {
     assert(heap);
-    assert(reference_rule);
 
     Object* object = calloc(sizeof(Object), 1);
     // TODO: check that object has been allocated
     
     object->reference_rule = reference_rule;
+    object->custom_reference_rule = custom_reference_rule;
     object->size = size;
     object->value = malloc(size);
     object->next = heap->first;
@@ -71,15 +71,15 @@ Object* allocateEmptyObject(
 
 Object* allocateObjectFromValue(
     Heap* heap,
-    ReferenceRule* reference_rule,
+    ReferenceRule reference_rule,
+    Object* custom_reference_rule,
     size_t size,
     const uint8_t* value_source
 ) {
     assert(heap);
-    assert(reference_rule);
     assert(value_source);
 
-    Object* object = allocateEmptyObject(heap, reference_rule, size);
+    Object* object = allocateEmptyObject(heap, reference_rule, custom_reference_rule, size);
     memcpy(object->value, value_source, size);
 
     return object;

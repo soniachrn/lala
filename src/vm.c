@@ -129,10 +129,26 @@ void interpret(VM* vm) {
                 Constant constant = vm->constants->constants[constant_index];
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
-                    &REFERENCE_RULE_PLAIN,
+                    REFERENCE_RULE_PLAIN,
+                    NULL,
                     constant.length,
                     constant.value
                 );
+                PUSH_ADDRESS((size_t)object);
+                break;
+            }
+
+            case OP_DEFINE_ON_HEAP: {
+                size_t length = readAddressFromSource(vm);
+                ReferenceRule reference_rule = (ReferenceRule)readByteFromSource(vm);
+                Object* object = allocateObjectFromValue(
+                    &vm->heap,
+                    reference_rule,
+                    NULL,
+                    length,
+                    vm->stack.stack_top - length * sizeof(uint8_t)
+                );
+                popBytesFromStack(&vm->stack, length);
                 PUSH_ADDRESS((size_t)object);
                 break;
             }
@@ -195,7 +211,8 @@ void interpret(VM* vm) {
 
                 Object* object = allocateEmptyObject(
                     &vm->heap,
-                    &REFERENCE_RULE_PLAIN,
+                    REFERENCE_RULE_PLAIN,
+                    NULL,
                     l_address->size + r_address->size
                 );
                 memcpy(object->value, l_address->value, l_address->size);
@@ -217,7 +234,8 @@ void interpret(VM* vm) {
 
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
-                    &REFERENCE_RULE_PLAIN,
+                    REFERENCE_RULE_PLAIN,
+                    NULL,
                     (size_t)length,
                     (uint8_t*)buffer
                 );
@@ -230,7 +248,8 @@ void interpret(VM* vm) {
 
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
-                    &REFERENCE_RULE_PLAIN,
+                    REFERENCE_RULE_PLAIN,
+                    NULL,
                     (size_t)length,
                     (uint8_t*)buffer
                 );
@@ -300,6 +319,67 @@ void interpret(VM* vm) {
                 if (!POP_BYTE()) {
                     vm->ip = vm->source + address;
                 }
+                break;
+            }
+
+            // Array
+            case OP_SUBSCRIPT_BYTE: {
+                int32_t index = POP_INT();
+                if (index < 0) {
+                    fprintf(stderr, "negative array index\n");
+                    exit(1);
+                }
+                Object* array_object = (Object*)POP_ADDRESS();
+                if ((size_t)index + sizeof(uint8_t) > array_object->size) {
+                    fprintf(stderr, "array out of bounds\n");
+                    exit(1);
+                }
+                PUSH_BYTE(((uint8_t*)array_object->value)[index]);
+                break;
+            }
+
+            case OP_SUBSCRIPT_INT: {
+                int32_t index = POP_INT();
+                if (index < 0) {
+                    fprintf(stderr, "negative array index\n");
+                    exit(1);
+                }
+                Object* array_object = (Object*)POP_ADDRESS();
+                if ((size_t)index + sizeof(int32_t) > array_object->size) {
+                    fprintf(stderr, "array out of bounds\n");
+                    exit(1);
+                }
+                PUSH_INT(((int32_t*)array_object->value)[index]);
+                break;
+            }
+
+            case OP_SUBSCRIPT_FLOAT: {
+                int32_t index = POP_INT();
+                if (index < 0) {
+                    fprintf(stderr, "negative array index\n");
+                    exit(1);
+                }
+                Object* array_object = (Object*)POP_ADDRESS();
+                if ((size_t)index + sizeof(double) > array_object->size) {
+                    fprintf(stderr, "array out of bounds\n");
+                    exit(1);
+                }
+                PUSH_FLOAT(((double*)array_object->value)[index]);
+                break;
+            }
+
+            case OP_SUBSCRIPT_ADDRESS: {
+                int32_t index = POP_INT();
+                if (index < 0) {
+                    fprintf(stderr, "negative array index\n");
+                    exit(1);
+                }
+                Object* array_object = (Object*)POP_ADDRESS();
+                if ((size_t)index + sizeof(size_t) > array_object->size) {
+                    fprintf(stderr, "array out of bounds\n");
+                    exit(1);
+                }
+                PUSH_ADDRESS(((size_t*)array_object->value)[index]);
                 break;
             }
 

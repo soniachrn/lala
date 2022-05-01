@@ -188,32 +188,14 @@ TEST_PARSER_EXPRESSION(ComplexExpression,
     {                                                                        \
         Variable variable;                                                   \
         EXPECT(accessVariableInScope(scope, name, strlen(name), &variable)); \
-        EXPECT_EQUALS_TOSTR(variable.type, value_type, valueTypeName);       \
+        EXPECT_EQUALS_COMP_TOSTR(                                            \
+            variable.type,                                                   \
+            value_type,                                                      \
+            valueTypesEqual,                                                 \
+            valueTypeName                                                    \
+        );                                                                   \
         EXPECT_EQUALS(variable.address_on_stack, address);                   \
     }
-
-TEST(DefaultInitializedVariables) {
-    Parser* parser = createParser(
-        "var boolean: bool\n"
-        "var integer: int\n"
-        "var floating-point: float\n"
-    );
-
-    parse(parser);
-
-    EXPECT_BINARY_SEQUENCE(
-        parser->chunk,
-        OP_PUSH_FALSE,
-        OP_PUSH_INT,   0x00, 0x00, 0x00, 0x00,
-        OP_PUSH_FLOAT, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-    );
-
-    EXPECT_VARIABLE(parser->scope, "boolean",        VALUE_BOOL,  0);
-    EXPECT_VARIABLE(parser->scope, "integer",        VALUE_INT,   1);
-    EXPECT_VARIABLE(parser->scope, "floating-point", VALUE_FLOAT, 5);
-
-    deleteParser(parser);
-}
 
 TEST(ExplicitlyInitializedVariables) {
     Parser* parser = createParser(
@@ -231,9 +213,9 @@ TEST(ExplicitlyInitializedVariables) {
         OP_PUSH_FLOAT, BINARY_FLOAT_0_5  // 0.5
     );
 
-    EXPECT_VARIABLE(parser->scope, "boolean",        VALUE_BOOL,  0);
-    EXPECT_VARIABLE(parser->scope, "integer",        VALUE_INT,   1);
-    EXPECT_VARIABLE(parser->scope, "floating-point", VALUE_FLOAT, 5);
+    EXPECT_VARIABLE(parser->scope, "boolean",        &VALUE_TYPE_BOOL,  0);
+    EXPECT_VARIABLE(parser->scope, "integer",        &VALUE_TYPE_INT,   1);
+    EXPECT_VARIABLE(parser->scope, "floating-point", &VALUE_TYPE_FLOAT, 5);
 
     deleteParser(parser);
 }
@@ -266,9 +248,9 @@ TEST(AccessAndPrintVariable) {
         OP_PRINT_FLOAT
     );
 
-    EXPECT_VARIABLE(parser->scope, "boolean",        VALUE_BOOL,  0);
-    EXPECT_VARIABLE(parser->scope, "integer",        VALUE_INT,   1);
-    EXPECT_VARIABLE(parser->scope, "floating-point", VALUE_FLOAT, 5);
+    EXPECT_VARIABLE(parser->scope, "boolean",        &VALUE_TYPE_BOOL,  0);
+    EXPECT_VARIABLE(parser->scope, "integer",        &VALUE_TYPE_INT,   1);
+    EXPECT_VARIABLE(parser->scope, "floating-point", &VALUE_TYPE_FLOAT, 5);
 
     deleteParser(parser);
 }
@@ -307,12 +289,12 @@ TEST(AssignVariable) {
         OP_SET_FLOAT_ON_STACK,   0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // 10 (f1)
     );
 
-    EXPECT_VARIABLE(parser->scope, "b1", VALUE_BOOL,  0);
-    EXPECT_VARIABLE(parser->scope, "b2", VALUE_BOOL,  1);
-    EXPECT_VARIABLE(parser->scope, "i1", VALUE_INT,   2);
-    EXPECT_VARIABLE(parser->scope, "i2", VALUE_INT,   6);
-    EXPECT_VARIABLE(parser->scope, "f1", VALUE_FLOAT, 10);
-    EXPECT_VARIABLE(parser->scope, "f2", VALUE_FLOAT, 18);
+    EXPECT_VARIABLE(parser->scope, "b1", &VALUE_TYPE_BOOL,  0);
+    EXPECT_VARIABLE(parser->scope, "b2", &VALUE_TYPE_BOOL,  1);
+    EXPECT_VARIABLE(parser->scope, "i1", &VALUE_TYPE_INT,   2);
+    EXPECT_VARIABLE(parser->scope, "i2", &VALUE_TYPE_INT,   6);
+    EXPECT_VARIABLE(parser->scope, "f1", &VALUE_TYPE_FLOAT, 10);
+    EXPECT_VARIABLE(parser->scope, "f2", &VALUE_TYPE_FLOAT, 18);
 
     deleteParser(parser);
 }

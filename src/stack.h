@@ -36,6 +36,8 @@ void fdumpStack(FILE* out, const Stack* stack, int padding);
 
 size_t stackSize(const Stack* stack);
 
+void popBytesFromStack(Stack* stack, size_t count);
+
 void pushByteOnStack(   Stack* stack, uint8_t value);
 void pushIntOnStack(    Stack* stack, int32_t value);
 void pushFloatOnStack(  Stack* stack, double  value);

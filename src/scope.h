@@ -18,7 +18,7 @@
 // └───────┘
 
 typedef struct {
-    ValueType type;
+    ValueType* type;
     size_t address_on_stack;
 } Variable;
 
@@ -49,7 +49,7 @@ bool declareVariableInScope(
     Scope* scope,
     const char* name,
     size_t name_lengh,
-    ValueType type
+    ValueType* type
 );
 
 bool accessVariableInScope(

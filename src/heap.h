@@ -10,15 +10,21 @@
 // │ Types │
 // └───────┘
 
-struct Object {
-    struct Object* reference_rule;
-    size_t   size;
-    uint8_t* value;
-    struct Object*  next;
-};
+typedef enum {
+    REFERENCE_RULE_PLAIN,
+    REFERENCE_RULE_REF_ARRAY,
+} ReferenceRule;
+
+struct Object;
 typedef struct Object Object;
 
-typedef struct Object ReferenceRule;
+struct Object {
+    ReferenceRule reference_rule;
+    Object* custom_reference_rule;
+    size_t size;
+    uint8_t* value;
+    Object* next;
+};
 
 typedef struct {
     Object* first;
@@ -29,7 +35,6 @@ typedef struct {
 // │ Constants declarations │
 // └────────────────────────┘
 
-extern ReferenceRule REFERENCE_RULE_PLAIN;
 extern Object OBJECT_STRING_TRUE;
 extern Object OBJECT_STRING_FALSE;
 
@@ -45,13 +50,15 @@ void fdumpHeap(FILE* out, Heap* heap, int padding);
 
 Object* allocateEmptyObject(
     Heap* heap,
-    ReferenceRule* reference_rule,
+    ReferenceRule reference_rule,
+    Object* custom_reference_rule,
     size_t size
 );
 
 Object* allocateObjectFromValue(
     Heap* heap,
-    ReferenceRule* reference_rule,
+    ReferenceRule reference_rule,
+    Object* custom_reference_rule,
     size_t size,
     const uint8_t* value_source
 );

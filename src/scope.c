@@ -115,7 +115,7 @@ bool declareVariableInScope(
     Scope* scope,
     const char* name,
     size_t name_length,
-    ValueType type
+    ValueType* type
 ) {
     ASSERT_SCOPE(scope);
 

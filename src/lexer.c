@@ -186,6 +186,7 @@ Token readToken(Lexer* lexer) {
 
         // String
         case '\'': return string(lexer);
+        case '"' : return makeErrorToken(lexer, "Single quotes ' are used for strings.");
 
         // End of input
         case '\0': return makeToken(lexer, TOKEN_END);

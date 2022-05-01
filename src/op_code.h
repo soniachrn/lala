@@ -7,76 +7,83 @@
 // └───────┘
 
 typedef enum {
+    // Empty
+    OP_EMPTY,
+
     // Push
-    OP_PUSH_TRUE     = 0x00,
-    OP_PUSH_FALSE    = 0x01,
-    OP_PUSH_INT      = 0x02,
-    OP_PUSH_FLOAT    = 0x03,
-    OP_LOAD_CONSTANT = 0x04,
+    OP_PUSH_TRUE,
+    OP_PUSH_FALSE,
+    OP_PUSH_INT,
+    OP_PUSH_FLOAT,
+    OP_LOAD_CONSTANT,
+    OP_DEFINE_ON_HEAP,
 
     // Logical
-    OP_OR  = 0x05,
-    OP_AND = 0x06,
-    OP_NEGATE_BOOL = 0x07,
+    OP_OR,
+    OP_AND,
+    OP_NEGATE_BOOL,
 
     // Comparison
-    OP_EQUALS_BOOL    = 0x08,
-    OP_EQUALS_INT     = 0x09,
-    OP_EQUALS_FLOAT   = 0x0A,
-    OP_EQUALS_STRING  = 0x0B,
-    OP_LESS_INT       = 0x0C,
-    OP_LESS_FLOAT     = 0x0D,
-    OP_LESS_STRING    = 0x0E,
-    OP_GREATER_INT    = 0x0F,
-    OP_GREATER_FLOAT  = 0x10,
-    OP_GREATER_STRING = 0x11,
+    OP_EQUALS_BOOL,
+    OP_EQUALS_INT,
+    OP_EQUALS_FLOAT,
+    OP_EQUALS_STRING,
+    OP_LESS_INT,
+    OP_LESS_FLOAT,
+    OP_LESS_STRING,
+    OP_GREATER_INT,
+    OP_GREATER_FLOAT,
+    OP_GREATER_STRING,
 
     // Math
-    OP_ADD_INT        = 0x12,
-    OP_ADD_FLOAT      = 0x13,
-    OP_MULTIPLY_INT   = 0x14,
-    OP_MULTIPLY_FLOAT = 0x15,
-    OP_DIVIDE_INT     = 0x16,
-    OP_DIVIDE_FLOAT   = 0x17,
-    OP_MODULO_INT     = 0x18,
-    OP_MODULO_FLOAT   = 0x19,
-    OP_NEGATE_INT     = 0x1A,
-    OP_NEGATE_FLOAT   = 0x1B,
+    OP_ADD_INT,
+    OP_ADD_FLOAT,
+    OP_MULTIPLY_INT,
+    OP_MULTIPLY_FLOAT,
+    OP_DIVIDE_INT,
+    OP_DIVIDE_FLOAT,
+    OP_MODULO_INT,
+    OP_MODULO_FLOAT,
+    OP_NEGATE_INT,
+    OP_NEGATE_FLOAT,
 
     // String
-    OP_CONCATENATE    = 0x1C,
+    OP_CONCATENATE,
 
     // Cast
-    OP_CAST_FLOAT_TO_INT    = 0x1D,
-    OP_CAST_INT_TO_FLOAT    = 0x1E,
-    OP_CAST_BOOL_TO_STRING  = 0x1F,
-    OP_CAST_INT_TO_STRING   = 0x20,
-    OP_CAST_FLOAT_TO_STRING = 0x21,
+    OP_CAST_FLOAT_TO_INT,
+    OP_CAST_INT_TO_FLOAT,
+    OP_CAST_BOOL_TO_STRING,
+    OP_CAST_INT_TO_STRING,
+    OP_CAST_FLOAT_TO_STRING,
 
     // Local variables
-    OP_GET_BYTE_FROM_STACK    = 0x22,
-    OP_GET_INT_FROM_STACK     = 0x23,
-    OP_GET_FLOAT_FROM_STACK   = 0x24,
-    OP_GET_ADDRESS_FROM_STACK = 0x25,
+    OP_GET_BYTE_FROM_STACK,
+    OP_GET_INT_FROM_STACK,
+    OP_GET_FLOAT_FROM_STACK,
+    OP_GET_ADDRESS_FROM_STACK,
 
-    OP_SET_BYTE_ON_STACK    = 0x26,
-    OP_SET_INT_ON_STACK     = 0x27,
-    OP_SET_FLOAT_ON_STACK   = 0x28,
-    OP_SET_ADDRESS_ON_STACK = 0x29,
+    OP_SET_BYTE_ON_STACK,
+    OP_SET_INT_ON_STACK,
+    OP_SET_FLOAT_ON_STACK,
+    OP_SET_ADDRESS_ON_STACK,
 
     // Print
-    OP_PRINT_BOOL   = 0x2A,
-    OP_PRINT_INT    = 0x2B,
-    OP_PRINT_FLOAT  = 0x2C,
-    OP_PRINT_STRING = 0x2D,
+    OP_PRINT_BOOL,
+    OP_PRINT_INT,
+    OP_PRINT_FLOAT,
+    OP_PRINT_STRING,
 
     // Jump
-    OP_JUMP = 0x2E,
-    OP_JUMP_IF_TRUE = 0x2F,
-    OP_JUMP_IF_FALSE = 0x30,
+    OP_JUMP,
+    OP_JUMP_IF_TRUE,
+    OP_JUMP_IF_FALSE,
 
-    // Empty
-    OP_EMPTY = 0x31,
+    // Array
+    OP_SUBSCRIPT_BYTE,
+    OP_SUBSCRIPT_INT,
+    OP_SUBSCRIPT_FLOAT,
+    OP_SUBSCRIPT_ADDRESS,
 } OpCode;
 
 

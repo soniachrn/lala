@@ -365,7 +365,7 @@ static void disassemble(LalaArguments arguments) {
     printf("–– PROGRAM (%ld-%ld)\n", header.program_offset, header.program_offset + header.program_length - 1);
 
     for (uint8_t* ip = program; ip < program + header.program_length; ) {
-        printf("%2lx %-20s", ip - program, opCodeName((OpCode)*ip));
+        printf("%2lx %-22s", ip - program, opCodeName((OpCode)*ip));
 
         switch (*ip++) {
             case OP_LOAD_CONSTANT:
@@ -381,6 +381,13 @@ static void disassemble(LalaArguments arguments) {
             case OP_PUSH_FLOAT:
                 printf(" %g", *(double*)ip);
                 ip += sizeof(double);
+                break;
+
+            case OP_DEFINE_ON_HEAP:
+                printf(" %lu", *(size_t*)ip);
+                ip += sizeof(size_t);
+                printf(" %u", *(uint8_t*)ip);
+                ip += sizeof(uint8_t);
                 break;
 
             case OP_GET_BYTE_FROM_STACK:

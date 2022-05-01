@@ -9,6 +9,7 @@ const char* opCodeName(OpCode op_code) {
         case OP_PUSH_INT:                return "push int";
         case OP_PUSH_FLOAT:              return "push float";
         case OP_LOAD_CONSTANT:           return "load constant";
+        case OP_DEFINE_ON_HEAP:          return "define on heap";
 
         // Logical
         case OP_OR:                      return "or";
@@ -73,6 +74,12 @@ const char* opCodeName(OpCode op_code) {
 
         // Empty
         case OP_EMPTY:                   return "empty";
+
+        // Array
+        case OP_SUBSCRIPT_BYTE:          return "subscript byte";
+        case OP_SUBSCRIPT_INT:           return "subscript int";
+        case OP_SUBSCRIPT_FLOAT:         return "subscript float";
+        case OP_SUBSCRIPT_ADDRESS:       return "subscript address";
 
         default:                         return "INVALID";
     }

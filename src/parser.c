@@ -6,6 +6,7 @@
 
 #include "ccf.h"
 #include "debug.h"
+#include "heap.h"
 
 
 // ┌────────┐
@@ -76,6 +77,7 @@ static void synchronize(Parser* parser);
 // Declaration
 static void parseDeclaration(Parser* parser);
 static void parseVariable(Parser* parser);
+static ValueType* parseValueType(Parser* parser);
 
 // Statement
 static void parseStatement (Parser* parser);
@@ -87,14 +89,14 @@ static void parseDoWhile   (Parser* parser);
 static void parseBlock     (Parser* parser);
 
 // Expression
-static ValueType parseOr        (Parser* parser);
-static ValueType parseAnd       (Parser* parser);
-static ValueType parseComparison(Parser* parser);
-static ValueType parseTerm      (Parser* parser);
-static ValueType parseFactor    (Parser* parser);
-static ValueType parsePrefix    (Parser* parser);
-static ValueType parsePostfix   (Parser* parser);
-static ValueType parsePrimary   (Parser* parser);
+static ValueType* parseOr        (Parser* parser);
+static ValueType* parseAnd       (Parser* parser);
+static ValueType* parseComparison(Parser* parser);
+static ValueType* parseTerm      (Parser* parser);
+static ValueType* parseFactor    (Parser* parser);
+static ValueType* parsePrefix    (Parser* parser);
+static ValueType* parsePostfix   (Parser* parser);
+static ValueType* parsePrimary   (Parser* parser);
 
 
 // —————————————————————
@@ -102,16 +104,16 @@ static ValueType parsePrimary   (Parser* parser);
 // —————————————————————
 
 static bool validateOperandType(
-    ValueType operand_type,
-    ValueType expected_operand_types[4]
+    BasicValueType operand_type,
+    BasicValueType expected_operand_types[4]
 );
 
 static void validateOperatorTypes(
     Parser* parser,
     Token expression_start_token,
     TokenType operator,
-    ValueType left_operand_type,
-    ValueType right_operand_type
+    BasicValueType left_operand_type,
+    BasicValueType right_operand_type
 );
 
 
@@ -129,7 +131,7 @@ static void emitOpCodesForTokenAndValueTypesCombination(
     Parser* parser,
     uint8_t arity,
     TokenType token_type,
-    ValueType value_type
+    BasicValueType basic_value_type
 );
 
 
@@ -210,13 +212,9 @@ void parse(Parser* parser) {
     ASSERT_PARSER(parser);
 }
 
-ValueType parseExpression(Parser* parser) {
+ValueType* parseExpression(Parser* parser) {
     ASSERT_PARSER(parser);
-
-    ValueType value_type = parseOr(parser);
-
-    ASSERT_PARSER(parser);
-    return value_type;
+    return parseOr(parser);
 }
 
 
@@ -423,64 +421,32 @@ static void parseVariable(Parser* parser) {
     Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
 
     // Type
-    ValueType value_type;
     forceMatch(parser, TOKEN_COLON);
-    switch (advance(parser)) {
-        case TOKEN_BOOL:   value_type = VALUE_BOOL;   break;
-        case TOKEN_INT:    value_type = VALUE_INT;    break;
-        case TOKEN_FLOAT:  value_type = VALUE_FLOAT;  break;
-        case TOKEN_STRING: value_type = VALUE_STRING; break;
-        default:
-            errorAtPrevious(
-                parser,
-                "Syntactic",
-                "Only bool, int, float and string types are supported at the moment. Got %s.",
-                tokenTypeName(previous(parser).type)
-            );
-            return;
-    }
+    ValueType* variable_type = parseValueType(parser);
 
     // Initialization
-    if (match(parser, TOKEN_EQUAL)) {
-        Token expression_start_token = next(parser);
-        ValueType initializer_value_type = parseExpression(parser);
-        if (value_type != initializer_value_type) {
-            error(
-                parser,
-                "Semantic",
-                expression_start_token,
-                previous(parser),
-                "Variable type (%s) and initializer expression type (%s) don't match.",
-                valueTypeName(value_type),
-                valueTypeName(initializer_value_type)
-            );
-            return;
-        }
-    }
-    // Default value
-    else {
-        switch (value_type) {
-            case VALUE_BOOL:
-                pushOpCodeOnStack(parser->chunk, OP_PUSH_FALSE);
-                break;
-            case VALUE_INT:
-                pushOpCodeOnStack(parser->chunk, OP_PUSH_INT);
-                pushIntOnStack(parser->chunk, (int32_t)0);
-                break;
-            case VALUE_FLOAT:
-                pushOpCodeOnStack(parser->chunk, OP_PUSH_FLOAT);
-                pushFloatOnStack(parser->chunk, (double)0);
-                break;
-            default:
-                assert(false);
-        }
+    forceMatch(parser, TOKEN_EQUAL);
+    Token expression_start_token = next(parser);
+    ValueType* initializer_value_type = parseExpression(parser);
+    if (!valueTypesEqual(variable_type, initializer_value_type)) {
+        error(
+            parser,
+            "Semantic",
+            expression_start_token,
+            previous(parser),
+            "Variable type (%s) and initializer expression type (%s) don't match.",
+            valueTypeName(variable_type),
+            valueTypeName(initializer_value_type)
+        );
+        return;
     }
 
+    // Declare variable
     if (!declareVariableInScope(
         parser->scope,
         identifier_token.start,
         identifier_token.length,
-        value_type
+        variable_type
     )) {
         errorAt(
             parser,
@@ -494,6 +460,32 @@ static void parseVariable(Parser* parser) {
     }
 
     ASSERT_PARSER(parser);
+}
+
+static ValueType* parseValueType(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    switch (advance(parser)) {
+        case TOKEN_BOOL:     return &VALUE_TYPE_BOOL;
+        case TOKEN_INT:      return &VALUE_TYPE_INT;
+        case TOKEN_FLOAT:    return &VALUE_TYPE_FLOAT;
+        case TOKEN_STRING:   return &VALUE_TYPE_STRING;
+        
+        case TOKEN_LBRACKET: {
+            ValueType* element_type = parseValueType(parser);
+            forceMatch(parser, TOKEN_RBRACKET);
+            return createArrayValueType(element_type);
+        }
+        
+        default:
+            errorAtPrevious(
+                parser,
+                "Syntactic",
+                "Expected type specifier: bool, int, float, string or array. Got %s.",
+                tokenTypeName(previous(parser).type)
+            );
+            return &VALUE_TYPE_INVALID;
+    }
 }
 
 static void parseStatement(Parser* parser) {
@@ -524,12 +516,12 @@ static void parsePrint(Parser* parser) {
 
     forceMatch(parser, TOKEN_PRINT);
     Token expression_start_token = next(parser);
-    ValueType value_type = parseExpression(parser);
-    switch (value_type) {
-        case VALUE_BOOL:  pushOpCodeOnStack(parser->chunk, OP_PRINT_BOOL);  break;
-        case VALUE_INT:   pushOpCodeOnStack(parser->chunk, OP_PRINT_INT);   break;
-        case VALUE_FLOAT: pushOpCodeOnStack(parser->chunk, OP_PRINT_FLOAT); break;
-        case VALUE_STRING: pushOpCodeOnStack(parser->chunk, OP_PRINT_STRING); break;
+    ValueType* value_type = parseExpression(parser);
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:   pushOpCodeOnStack(parser->chunk, OP_PRINT_BOOL);   break;
+        case BASIC_VALUE_TYPE_INT:    pushOpCodeOnStack(parser->chunk, OP_PRINT_INT);    break;
+        case BASIC_VALUE_TYPE_FLOAT:  pushOpCodeOnStack(parser->chunk, OP_PRINT_FLOAT);  break;
+        case BASIC_VALUE_TYPE_STRING: pushOpCodeOnStack(parser->chunk, OP_PRINT_STRING); break;
         default:
             error(
                 parser,
@@ -551,7 +543,7 @@ static void parseAssignment(Parser* parser) {
     Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
     forceMatch(parser, TOKEN_EQUAL);
     Token expression_start_token = next(parser);
-    ValueType expression_value_type = parseExpression(parser);
+    ValueType* expression_value_type = parseExpression(parser);
 
     Variable variable;
     bool found_variable = accessVariableInScope(
@@ -573,7 +565,7 @@ static void parseAssignment(Parser* parser) {
         return;
     }
 
-    if (variable.type != expression_value_type) {
+    if (!valueTypesEqual(variable.type, expression_value_type)) {
         error(
             parser,
             "Semantic",
@@ -587,10 +579,17 @@ static void parseAssignment(Parser* parser) {
     }
 
     OpCode op_code;
-    switch (variable.type) {
-        case VALUE_BOOL:  op_code = OP_SET_BYTE_ON_STACK;  break;
-        case VALUE_INT:   op_code = OP_SET_INT_ON_STACK;   break;
-        case VALUE_FLOAT: op_code = OP_SET_FLOAT_ON_STACK; break;
+    switch (variable.type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:  op_code = OP_SET_BYTE_ON_STACK;  break;
+        case BASIC_VALUE_TYPE_INT:   op_code = OP_SET_INT_ON_STACK;   break;
+        case BASIC_VALUE_TYPE_FLOAT: op_code = OP_SET_FLOAT_ON_STACK; break;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+            op_code = OP_SET_ADDRESS_ON_STACK;
+            break;
+
         default:
             assert(false);
     }
@@ -608,16 +607,16 @@ static void parseIf(Parser* parser){
     
     // Parse condition expression
     Token expression_start_token = next(parser);
-    ValueType expression_value_type = parseExpression(parser);
+    ValueType* condition_value_type = parseExpression(parser);
 
-    if (expression_value_type != VALUE_BOOL) {
+    if (condition_value_type->basic_type != BASIC_VALUE_TYPE_BOOL) {
         error(
             parser,
             "Semantic",
             expression_start_token,
             previous(parser),
             "Condition expression in an if statement is %s, but has to be bool.",
-            valueTypeName(expression_value_type)
+            valueTypeName(condition_value_type)
         );
         return;
     }
@@ -647,16 +646,16 @@ static void parseWhile(Parser* parser){
 
     // Parse condition expression
     Token expression_start_token = next(parser);
-    ValueType expression_value_type = parseExpression(parser);
+    ValueType* condition_value_type = parseExpression(parser);
 
-    if (expression_value_type != VALUE_BOOL) {
+    if (condition_value_type->basic_type != BASIC_VALUE_TYPE_BOOL) {
         error(
             parser,
             "Semantic",
             expression_start_token,
             previous(parser),
-            "Condition expression in a while statement is %s, but has to be bool.",
-            valueTypeName(expression_value_type)
+            "Condition expression in an if statement is %s, but has to be bool.",
+            valueTypeName(condition_value_type)
         );
         return;
     }
@@ -695,16 +694,16 @@ static void parseDoWhile(Parser* parser){
 
     // Parse condition expression
     Token expression_start_token = next(parser);
-    ValueType expression_value_type = parseExpression(parser);
+    ValueType* condition_value_type = parseExpression(parser);
 
-    if (expression_value_type != VALUE_BOOL) {
+    if (condition_value_type->basic_type != BASIC_VALUE_TYPE_BOOL) {
         error(
             parser,
             "Semantic",
             expression_start_token,
             previous(parser),
-            "Condition expression in a while statement is %s, but has to be bool.",
-            valueTypeName(expression_value_type)
+            "Condition expression in an if statement is %s, but has to be bool.",
+            valueTypeName(condition_value_type)
         );
         return;
     }
@@ -729,45 +728,47 @@ static void parseBlock(Parser* parser) {
     ASSERT_PARSER(parser);
 }
 
-static ValueType parseOr(Parser* parser) {
+static ValueType* parseOr(Parser* parser) {
     ASSERT_PARSER(parser);
 
     Token expression_start_token = next(parser);
-    ValueType value_type_l = parseAnd(parser);
+    ValueType* value_type_l = parseAnd(parser);
 
     while (match(parser, TOKEN_OR)) {
-        ValueType value_type_r = parseAnd(parser);
+        ValueType* value_type_r = parseAnd(parser);
 
-        validateOperatorTypes(parser, expression_start_token, TOKEN_OR, value_type_l, value_type_r);
-        emitOpCodesForTokenAndValueTypesCombination(parser, 2, TOKEN_OR, value_type_l);
+        validateOperatorTypes(parser, expression_start_token, TOKEN_OR, value_type_l->basic_type, value_type_r->basic_type);
+        emitOpCodesForTokenAndValueTypesCombination(parser, 2, TOKEN_OR, value_type_l->basic_type);
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type_l);
     return value_type_l;
 }
 
-static ValueType parseAnd(Parser* parser) {
+static ValueType* parseAnd(Parser* parser) {
     ASSERT_PARSER(parser);
 
     Token expression_start_token = next(parser);
-    ValueType value_type_l = parseComparison(parser);
+    ValueType* value_type_l = parseComparison(parser);
     
     while (match(parser, TOKEN_AND)) {
-        ValueType value_type_r = parseComparison(parser);
+        ValueType* value_type_r = parseComparison(parser);
 
-        validateOperatorTypes(parser, expression_start_token, TOKEN_AND, value_type_l, value_type_r);
-        emitOpCodesForTokenAndValueTypesCombination(parser, 2, TOKEN_AND, value_type_l);
+        validateOperatorTypes(parser, expression_start_token, TOKEN_AND, value_type_l->basic_type, value_type_r->basic_type);
+        emitOpCodesForTokenAndValueTypesCombination(parser, 2, TOKEN_AND, value_type_l->basic_type);
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type_l);
     return value_type_l;
 }
 
-static ValueType parseComparison(Parser* parser) {
+static ValueType* parseComparison(Parser* parser) {
     ASSERT_PARSER(parser);
 
     Token expression_start_token = next(parser);
-    ValueType value_type_l = parseTerm(parser);
+    ValueType* value_type_l = parseTerm(parser);
     
     if (match(parser, TOKEN_EQUAL_EQUAL)       ||
         match(parser, TOKEN_EXCLAMATION_EQUAL) ||
@@ -777,41 +778,43 @@ static ValueType parseComparison(Parser* parser) {
         match(parser, TOKEN_LESS)
     ) {
         TokenType operator_token_type = previous(parser).type;
-        ValueType value_type_r = parseTerm(parser);
+        ValueType* value_type_r = parseTerm(parser);
 
-        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l, value_type_r);
-        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l);
+        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l->basic_type, value_type_r->basic_type);
+        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l->basic_type);
 
-        value_type_l = VALUE_BOOL;
+        value_type_l = &VALUE_TYPE_BOOL;
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type_l);
     return value_type_l;
 }
 
-static ValueType parseTerm(Parser* parser) {
+static ValueType* parseTerm(Parser* parser) {
     ASSERT_PARSER(parser);
 
     Token expression_start_token = next(parser);
-    ValueType value_type_l = parseFactor(parser);
+    ValueType* value_type_l = parseFactor(parser);
     
     while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
         TokenType operator_token_type = previous(parser).type;
-        ValueType value_type_r = parseFactor(parser);
+        ValueType* value_type_r = parseFactor(parser);
 
-        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l, value_type_r);
-        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l);
+        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l->basic_type, value_type_r->basic_type);
+        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l->basic_type);
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type_l);
     return value_type_l;
 }
 
-static ValueType parseFactor(Parser* parser) {
+static ValueType* parseFactor(Parser* parser) {
     ASSERT_PARSER(parser);
 
     Token expression_start_token = next(parser);
-    ValueType value_type_l = parsePrefix(parser);
+    ValueType* value_type_l = parsePrefix(parser);
     
     while (
         match(parser, TOKEN_STAR)    ||
@@ -819,17 +822,18 @@ static ValueType parseFactor(Parser* parser) {
         match(parser, TOKEN_PERCENT)
     ) {
         TokenType operator_token_type = previous(parser).type;
-        ValueType value_type_r = parsePrefix(parser);
+        ValueType* value_type_r = parsePrefix(parser);
 
-        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l, value_type_r);
-        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l);
+        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l->basic_type, value_type_r->basic_type);
+        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l->basic_type);
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type_l);
     return value_type_l;
 }
 
-static ValueType parsePrefix(Parser* parser) {
+static ValueType* parsePrefix(Parser* parser) {
     ASSERT_PARSER(parser);
 
     bool had_prefix_operator = false;
@@ -839,27 +843,28 @@ static ValueType parsePrefix(Parser* parser) {
         operator_token_type = previous(parser).type;
     }
     
-    ValueType value_type = parsePostfix(parser);
+    ValueType* value_type = parsePostfix(parser);
 
     if (had_prefix_operator) {
         if (operator_token_type == TOKEN_MINUS) {
-            ValueType expected[4] = { VALUE_INT, VALUE_FLOAT };
-            validateOperandType(value_type, expected);
+            BasicValueType expected[4] = { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT };
+            validateOperandType(value_type->basic_type, expected);
         } else if (operator_token_type == TOKEN_EXCLAMATION) {
-            ValueType expected[4] = { VALUE_BOOL };
-            validateOperandType(value_type, expected);
+            BasicValueType expected[4] = { BASIC_VALUE_TYPE_BOOL };
+            validateOperandType(value_type->basic_type, expected);
         }
-        emitOpCodesForTokenAndValueTypesCombination(parser, 1, operator_token_type, value_type);
+        emitOpCodesForTokenAndValueTypesCombination(parser, 1, operator_token_type, value_type->basic_type);
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type);
     return value_type;
 }
 
-static ValueType parsePostfix(Parser* parser) {
+static ValueType* parsePostfix(Parser* parser) {
     ASSERT_PARSER(parser);
 
-    ValueType value_type = parsePrimary(parser);
+    ValueType* value_type = parsePrimary(parser);
 
     while (
         match(parser, TOKEN_DOT)      ||
@@ -876,7 +881,7 @@ static ValueType parsePostfix(Parser* parser) {
                     "Syntactic",
                     "Structures not implemented yet."
                 );
-                return VALUE_INVALID;
+                return &VALUE_TYPE_INVALID;
                 // TODO: 1. check type is obj
                 //       2. eat identifier
                 //       3. push member access op
@@ -888,63 +893,103 @@ static ValueType parsePostfix(Parser* parser) {
                     "Syntactic",
                     "Functions not implemented yet."
                 )
-                return VALUE_INVALID;
+                return &VALUE_TYPE_INVALID;
                 // TODO: 1. check type is func
                 //       2. eat argument list
                 //       3. check signature
                 //       4. push call op
             
             // Subscript
-            case TOKEN_LBRACKET:
-                errorAtPrevious(
-                    parser,
-                    "Syntactic",
-                    "Arrays and maps are not implemented yet."
-                );
-                return VALUE_INVALID;
-                // TODO: 1. check type is arr or map
-                //       2. eat index
-                //       3. push subscript op
+            case TOKEN_LBRACKET: {
+                if (value_type->basic_type != BASIC_VALUE_TYPE_ARRAY) {
+                    errorAtPrevious(
+                        parser,
+                        "Semantic",
+                        "Trying to subscript a %s. Only arrays can be subscripted.",
+                        valueTypeName(value_type)
+                    );
+                    return &VALUE_TYPE_INVALID;
+                }
+
+                Token expression_start_token = next(parser);
+                ValueType* index_type = parseExpression(parser);
+
+                if (index_type->basic_type != BASIC_VALUE_TYPE_INT) {
+                    error(
+                        parser,
+                        "Semantic",
+                        expression_start_token,
+                        previous(parser),
+                        "Invalid array index type %s. Only int can be an array index.",
+                        valueTypeName(index_type)
+                    );
+                    return &VALUE_TYPE_INVALID;
+                }
+
+                forceMatch(parser, TOKEN_RBRACKET);
+
+                switch (value_type->as.array.element_type->basic_type) {
+                    case BASIC_VALUE_TYPE_BOOL:
+                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_BYTE);
+                        break;
+                    case BASIC_VALUE_TYPE_INT:
+                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_INT);
+                        break;
+                    case BASIC_VALUE_TYPE_FLOAT:
+                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_FLOAT);
+                        break;
+                    case BASIC_VALUE_TYPE_STRING:
+                    case BASIC_VALUE_TYPE_ARRAY:
+                    case BASIC_VALUE_TYPE_MAP:
+                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_ADDRESS);
+                        break;
+                    default:
+                        assert(false);
+                }
+
+                value_type = value_type->as.array.element_type;
+                break;
+            }
 
             // Type cast
             case TOKEN_COLON:
                 switch (advance(parser)) {
                     
                     case TOKEN_INT: {
-                        ValueType expected[4] = { VALUE_FLOAT };
-                        validateOperandType(value_type, expected);
+                        BasicValueType expected[4] = { BASIC_VALUE_TYPE_FLOAT };
+                        validateOperandType(value_type->basic_type, expected);
                         pushOpCodeOnStack(parser->chunk, OP_CAST_FLOAT_TO_INT);
-                        value_type = VALUE_INT;
+                        value_type = &VALUE_TYPE_INT;
                         break;
                     }
                     
                     case TOKEN_FLOAT: {
-                        ValueType expected[4] = { VALUE_INT };
-                        validateOperandType(value_type, expected);
+                        BasicValueType expected[4] = { BASIC_VALUE_TYPE_INT };
+                        validateOperandType(value_type->basic_type, expected);
                         pushOpCodeOnStack(parser->chunk, OP_CAST_INT_TO_FLOAT);
-                        value_type = VALUE_FLOAT;
+                        value_type = &VALUE_TYPE_FLOAT;
                         break;
                     }
                     
                     case TOKEN_STRING: {
-                        ValueType expected[4] = { VALUE_BOOL, VALUE_INT, VALUE_FLOAT };
-                        validateOperandType(value_type, expected);
+                        BasicValueType expected[4] = { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT };
+                        validateOperandType(value_type->basic_type, expected);
 
-                        switch (value_type) {
-                            case VALUE_BOOL:
+                        switch (value_type->basic_type) {
+                            case BASIC_VALUE_TYPE_BOOL:
                                 pushOpCodeOnStack(parser->chunk, OP_CAST_BOOL_TO_STRING);
                                 break;
-                            case VALUE_INT:
+                            case BASIC_VALUE_TYPE_INT:
                                 pushOpCodeOnStack(parser->chunk, OP_CAST_INT_TO_STRING);
                                 break;
-                            case VALUE_FLOAT:
+                            case BASIC_VALUE_TYPE_FLOAT:
                                 pushOpCodeOnStack(parser->chunk, OP_CAST_FLOAT_TO_STRING);
                                 break;
                             default:
                                 assert(false);
                         }
 
-                        value_type = VALUE_STRING;
+                        value_type = &VALUE_TYPE_STRING;
                         break;
                     }
 
@@ -955,7 +1000,7 @@ static ValueType parsePostfix(Parser* parser) {
                             "Unexpected token for type cast: %s.",
                             tokenTypeName(previous(parser).type)
                         );
-                        return VALUE_INVALID;
+                        return &VALUE_TYPE_INVALID;
                 }
                 break;
 
@@ -965,31 +1010,32 @@ static ValueType parsePostfix(Parser* parser) {
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type);
     return value_type;
 }
 
-static ValueType parsePrimary(Parser* parser) {
+static ValueType* parsePrimary(Parser* parser) {
     ASSERT_PARSER(parser);
 
-    ValueType value_type;
+    ValueType* value_type;
 
     switch (advance(parser)) {
 
         case TOKEN_TRUE:
             pushOpCodeOnStack(parser->chunk, OP_PUSH_TRUE);
-            value_type = VALUE_BOOL;
+            value_type = &VALUE_TYPE_BOOL;
             break;
         
         case TOKEN_FALSE:
             pushOpCodeOnStack(parser->chunk, OP_PUSH_FALSE);
-            value_type = VALUE_BOOL;
+            value_type = &VALUE_TYPE_BOOL;
             break;
         
         case TOKEN_INTEGER_VALUE: {
             int32_t value = (int32_t)strtol(previous(parser).start, NULL, 10);
             pushOpCodeOnStack(parser->chunk, OP_PUSH_INT);
             pushIntOnStack(parser->chunk, value);
-            value_type = VALUE_INT;
+            value_type = &VALUE_TYPE_INT;
             break;
         }
         
@@ -997,7 +1043,7 @@ static ValueType parsePrimary(Parser* parser) {
             double value = strtod(previous(parser).start, NULL);
             pushOpCodeOnStack(parser->chunk, OP_PUSH_FLOAT);
             pushFloatOnStack(parser->chunk, value);
-            value_type = VALUE_FLOAT;
+            value_type = &VALUE_TYPE_FLOAT;
             break;
         }
         
@@ -1009,7 +1055,7 @@ static ValueType parsePrimary(Parser* parser) {
             );
             pushOpCodeOnStack(parser->chunk, OP_LOAD_CONSTANT);
             pushByteOnStack(parser->chunk, string_constant_i);
-            value_type = VALUE_STRING;
+            value_type = &VALUE_TYPE_STRING;
             break;
         }
         
@@ -1030,15 +1076,21 @@ static ValueType parsePrimary(Parser* parser) {
                     previous(parser).length,
                     previous(parser).start
                 );
-                return VALUE_INVALID;
+                return &VALUE_TYPE_INVALID;
             }
 
             OpCode op_code;
-            switch (variable.type) {
-                case VALUE_BOOL:   op_code = OP_GET_BYTE_FROM_STACK;    break;
-                case VALUE_INT:    op_code = OP_GET_INT_FROM_STACK;     break;
-                case VALUE_FLOAT:  op_code = OP_GET_FLOAT_FROM_STACK;   break;
-                case VALUE_STRING: op_code = OP_GET_ADDRESS_FROM_STACK; break;
+            switch (variable.type->basic_type) {
+                case BASIC_VALUE_TYPE_BOOL:   op_code = OP_GET_BYTE_FROM_STACK;    break;
+                case BASIC_VALUE_TYPE_INT:    op_code = OP_GET_INT_FROM_STACK;     break;
+                case BASIC_VALUE_TYPE_FLOAT:  op_code = OP_GET_FLOAT_FROM_STACK;   break;
+
+                case BASIC_VALUE_TYPE_STRING:
+                case BASIC_VALUE_TYPE_ARRAY:
+                case BASIC_VALUE_TYPE_MAP:
+                    op_code = OP_GET_ADDRESS_FROM_STACK;
+                    break;
+
                 default:
                     assert(false);
             }
@@ -1051,30 +1103,51 @@ static ValueType parsePrimary(Parser* parser) {
         }
         
         case TOKEN_LBRACKET: {
-            ValueType array_elements_type = VALUE_INVALID;
+            ValueType* element_type = NULL;
             size_t elements_count = 0;
 
+            // TODO: produce an error message in case of unterminated array; same with blocks
+            
             while (!match(parser, TOKEN_RBRACKET) && peekNext(parser) != TOKEN_END) {
                 Token expression_start_token = next(parser);
-                ValueType current_array_element_type = parseExpression(parser);
-                if (current_array_element_type != array_elements_type) {
+                ValueType* current_element_type = parseExpression(parser);
+                if (current_element_type == &VALUE_TYPE_INVALID) {
+                    return &VALUE_TYPE_INVALID;
+                }
+
+                if (element_type == NULL) {
+                    element_type = current_element_type;
+                }
+
+                if (!valueTypesEqual(current_element_type, element_type)) {
                     error(
                         parser,
                         "Semantic",
                         expression_start_token,
                         previous(parser),
                         "Invalid array element type %s in an array of %s",
-                        valueTypeName(current_array_element_type),
-                        valueTypeName(array_elements_type)
+                        valueTypeName(current_element_type),
+                        valueTypeName(element_type)
                     );
-                    return VALUE_INVALID;
+                    return &VALUE_TYPE_INVALID;
                 }
+
                 if (peekNext(parser) != TOKEN_RBRACKET) {
                     forceMatch(parser, TOKEN_COMMA);
                 }
+
                 elements_count += 1;
             }
-            return VALUE_ARRAY;
+        
+            pushOpCodeOnStack(parser->chunk, OP_DEFINE_ON_HEAP);
+            pushAddressOnStack(parser->chunk, elements_count * valueTypeSize(element_type));
+            pushByteOnStack(
+                parser->chunk,
+                isReferenceValueType(element_type) ? REFERENCE_RULE_REF_ARRAY : REFERENCE_RULE_PLAIN
+            );
+
+            value_type = createArrayValueType(element_type);
+            break;
         }
         
         case TOKEN_LBRACE:
@@ -1083,7 +1156,7 @@ static ValueType parsePrimary(Parser* parser) {
                 "Syntactic",
                 "Maps not implemented yet."
             );
-            return VALUE_INVALID;
+            return &VALUE_TYPE_INVALID;
         
         case TOKEN_LPAREN:
             value_type = parseExpression(parser);
@@ -1097,10 +1170,11 @@ static ValueType parsePrimary(Parser* parser) {
                 "Unexpected token %s while parsing a primary value.",
                 tokenTypeName(previous(parser).type)
             );
-            return VALUE_INVALID;
+            return &VALUE_TYPE_INVALID;
     }
 
     ASSERT_PARSER(parser);
+    assert(value_type);
     return value_type;
 }
 
@@ -1110,16 +1184,16 @@ static ValueType parsePrimary(Parser* parser) {
 // ─────────────────────
 
 typedef struct {
-    ValueType  left_operand_expected_types[4];
-    ValueType right_operand_expected_types[4];
+    BasicValueType  left_operand_expected_types[4];
+    BasicValueType right_operand_expected_types[4];
     bool types_have_to_match;
 } OperatorTypeRules;
 
-#define ANY { VALUE_BOOL, VALUE_INT, VALUE_FLOAT, VALUE_STRING }
-#define B   { VALUE_BOOL, VALUE_BOOL, VALUE_BOOL, VALUE_BOOL }
-#define I   { VALUE_INT, VALUE_INT, VALUE_INT, VALUE_INT }
-#define IF  { VALUE_INT, VALUE_FLOAT, VALUE_FLOAT, VALUE_FLOAT }
-#define IFS { VALUE_INT, VALUE_FLOAT, VALUE_STRING, VALUE_STRING }
+#define ANY { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_STRING }
+#define B   { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_BOOL }
+#define I   { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_INT }
+#define IF  { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_FLOAT }
+#define IFS { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_STRING, BASIC_VALUE_TYPE_STRING }
 
 OperatorTypeRules operator_type_rules[] = {
     [TOKEN_OR]                = { B,    B,    true  },
@@ -1145,8 +1219,8 @@ OperatorTypeRules operator_type_rules[] = {
 #undef ANY
 
 static bool validateOperandType(
-    ValueType operand_type,
-    ValueType expected_operand_types[4]
+    BasicValueType operand_type,
+    BasicValueType expected_operand_types[4]
 ) {
     bool operand_type_matched = false;
     for (size_t i = 0; i < 4; ++i) {
@@ -1167,8 +1241,8 @@ static void validateOperatorTypes(
     Parser* parser,
     Token expression_start_token,
     TokenType operator,
-    ValueType left_operand_type,
-    ValueType right_operand_type
+    BasicValueType left_operand_type,
+    BasicValueType right_operand_type
 ) {
     ASSERT_PARSER(parser);
 
@@ -1195,8 +1269,8 @@ static void validateOperatorTypes(
             previous(parser),
             "Expected %s's operands to be of the same type, but the types differ: %s and %s.",
             tokenTypeName(operator),
-            valueTypeName(left_operand_type),
-            valueTypeName(right_operand_type)
+            basicValueTypeName(left_operand_type),
+            basicValueTypeName(right_operand_type)
         );
     }
 
@@ -1211,62 +1285,62 @@ static void validateOperatorTypes(
 #define KEY(arity, token_type, value_type) ((token_type * 4 + value_type) * 3 + arity)
 
 OpCode token_and_value_type_to_opcodes[][2] = {
-    [KEY(2, TOKEN_OR,                 VALUE_BOOL)  ] = { OP_OR,              OP_EMPTY       },
+    [KEY(2, TOKEN_OR,                 BASIC_VALUE_TYPE_BOOL)  ] = { OP_OR,              OP_EMPTY       },
 
-    [KEY(2, TOKEN_AND,                VALUE_BOOL)  ] = { OP_AND,             OP_EMPTY       },
+    [KEY(2, TOKEN_AND,                BASIC_VALUE_TYPE_BOOL)  ] = { OP_AND,             OP_EMPTY       },
     
-    [KEY(2, TOKEN_EQUAL_EQUAL,        VALUE_BOOL)  ] = { OP_EQUALS_BOOL,     OP_EMPTY       },
-    [KEY(2, TOKEN_EQUAL_EQUAL,        VALUE_INT)   ] = { OP_EQUALS_INT,      OP_EMPTY       },
-    [KEY(2, TOKEN_EQUAL_EQUAL,        VALUE_FLOAT) ] = { OP_EQUALS_FLOAT,    OP_EMPTY       },
-    [KEY(2, TOKEN_EQUAL_EQUAL,        VALUE_STRING)] = { OP_EQUALS_STRING,   OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_EQUALS_BOOL,     OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_INT)   ] = { OP_EQUALS_INT,      OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_FLOAT) ] = { OP_EQUALS_FLOAT,    OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_STRING)] = { OP_EQUALS_STRING,   OP_EMPTY       },
     
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  VALUE_BOOL)  ] = { OP_EQUALS_BOOL,     OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  VALUE_INT)   ] = { OP_EQUALS_INT,      OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  VALUE_FLOAT) ] = { OP_EQUALS_FLOAT,    OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  VALUE_STRING)] = { OP_EQUALS_STRING,   OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_BOOL)  ] = { OP_EQUALS_BOOL,     OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_INT)   ] = { OP_EQUALS_INT,      OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_FLOAT) ] = { OP_EQUALS_FLOAT,    OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_STRING)] = { OP_EQUALS_STRING,   OP_NEGATE_BOOL },
     
-    [KEY(2, TOKEN_GREATER_EQUAL,      VALUE_INT)   ] = { OP_LESS_INT,        OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_GREATER_EQUAL,      VALUE_FLOAT) ] = { OP_LESS_FLOAT,      OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_GREATER_EQUAL,      VALUE_STRING)] = { OP_LESS_STRING,     OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_INT)   ] = { OP_LESS_INT,        OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_FLOAT) ] = { OP_LESS_FLOAT,      OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_STRING)] = { OP_LESS_STRING,     OP_NEGATE_BOOL },
     
-    [KEY(2, TOKEN_LESS_EQUAL,         VALUE_INT)   ] = { OP_GREATER_INT,     OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_LESS_EQUAL,         VALUE_FLOAT) ] = { OP_GREATER_FLOAT,   OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_LESS_EQUAL,         VALUE_STRING)] = { OP_GREATER_STRING,  OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_INT)   ] = { OP_GREATER_INT,     OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_FLOAT) ] = { OP_GREATER_FLOAT,   OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_STRING)] = { OP_GREATER_STRING,  OP_NEGATE_BOOL },
     
-    [KEY(2, TOKEN_GREATER,            VALUE_INT)   ] = { OP_GREATER_INT,     OP_EMPTY       },
-    [KEY(2, TOKEN_GREATER,            VALUE_FLOAT) ] = { OP_GREATER_FLOAT,   OP_EMPTY       },
-    [KEY(2, TOKEN_GREATER,            VALUE_STRING)] = { OP_GREATER_STRING,  OP_EMPTY       },
+    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_INT)   ] = { OP_GREATER_INT,     OP_EMPTY       },
+    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_FLOAT) ] = { OP_GREATER_FLOAT,   OP_EMPTY       },
+    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_STRING)] = { OP_GREATER_STRING,  OP_EMPTY       },
     
-    [KEY(2, TOKEN_LESS,               VALUE_INT)   ] = { OP_LESS_INT,        OP_EMPTY       },
-    [KEY(2, TOKEN_LESS,               VALUE_FLOAT) ] = { OP_LESS_FLOAT,      OP_EMPTY       },
-    [KEY(2, TOKEN_LESS,               VALUE_STRING)] = { OP_LESS_STRING,     OP_EMPTY       },
+    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_INT)   ] = { OP_LESS_INT,        OP_EMPTY       },
+    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_LESS_FLOAT,      OP_EMPTY       },
+    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_STRING)] = { OP_LESS_STRING,     OP_EMPTY       },
     
-    [KEY(2, TOKEN_PLUS,               VALUE_INT)   ] = { OP_ADD_INT,         OP_EMPTY       },
-    [KEY(2, TOKEN_PLUS,               VALUE_FLOAT) ] = { OP_ADD_FLOAT,       OP_EMPTY       },
-    [KEY(2, TOKEN_PLUS,               VALUE_STRING)] = { OP_CONCATENATE,     OP_EMPTY       },
+    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_INT)   ] = { OP_ADD_INT,         OP_EMPTY       },
+    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_ADD_FLOAT,       OP_EMPTY       },
+    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_STRING)] = { OP_CONCATENATE,     OP_EMPTY       },
     
-    [KEY(2, TOKEN_MINUS,              VALUE_INT)   ] = { OP_NEGATE_INT,      OP_ADD_INT     },
-    [KEY(2, TOKEN_MINUS,              VALUE_FLOAT) ] = { OP_NEGATE_FLOAT,    OP_ADD_FLOAT   },
+    [KEY(2, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,      OP_ADD_INT     },
+    [KEY(2, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,    OP_ADD_FLOAT   },
     
-    [KEY(2, TOKEN_STAR,               VALUE_INT)   ] = { OP_MULTIPLY_INT,    OP_EMPTY       },
-    [KEY(2, TOKEN_STAR,               VALUE_FLOAT) ] = { OP_MULTIPLY_FLOAT,  OP_EMPTY       },
+    [KEY(2, TOKEN_STAR,               BASIC_VALUE_TYPE_INT)   ] = { OP_MULTIPLY_INT,    OP_EMPTY       },
+    [KEY(2, TOKEN_STAR,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_MULTIPLY_FLOAT,  OP_EMPTY       },
     
-    [KEY(2, TOKEN_SLASH,              VALUE_INT)   ] = { OP_DIVIDE_INT,      OP_EMPTY       },
-    [KEY(2, TOKEN_SLASH,              VALUE_FLOAT) ] = { OP_DIVIDE_FLOAT,    OP_EMPTY       },
+    [KEY(2, TOKEN_SLASH,              BASIC_VALUE_TYPE_INT)   ] = { OP_DIVIDE_INT,      OP_EMPTY       },
+    [KEY(2, TOKEN_SLASH,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_DIVIDE_FLOAT,    OP_EMPTY       },
     
-    [KEY(2, TOKEN_PERCENT,            VALUE_INT)   ] = { OP_MODULO_INT,      OP_EMPTY       },
-    [KEY(2, TOKEN_PERCENT,            VALUE_FLOAT) ] = { OP_MODULO_FLOAT,    OP_EMPTY       },
+    [KEY(2, TOKEN_PERCENT,            BASIC_VALUE_TYPE_INT)   ] = { OP_MODULO_INT,      OP_EMPTY       },
+    [KEY(2, TOKEN_PERCENT,            BASIC_VALUE_TYPE_FLOAT) ] = { OP_MODULO_FLOAT,    OP_EMPTY       },
 
-    [KEY(1, TOKEN_EXCLAMATION,        VALUE_BOOL)  ] = { OP_NEGATE_BOOL,     OP_EMPTY       },
-    [KEY(1, TOKEN_MINUS,              VALUE_INT)   ] = { OP_NEGATE_INT,      OP_EMPTY       },
-    [KEY(1, TOKEN_MINUS,              VALUE_FLOAT) ] = { OP_NEGATE_FLOAT,    OP_EMPTY       },
+    [KEY(1, TOKEN_EXCLAMATION,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_NEGATE_BOOL,     OP_EMPTY       },
+    [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,      OP_EMPTY       },
+    [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,    OP_EMPTY       },
 };
 
 static void emitOpCodesForTokenAndValueTypesCombination(
     Parser* parser,
     uint8_t arity,
     TokenType token_type,
-    ValueType value_type
+    BasicValueType value_type
 ) {
     pushOpCodeOnStack(
         parser->chunk,

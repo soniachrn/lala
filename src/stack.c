@@ -135,6 +135,15 @@ size_t stackSize(const Stack* stack) {
     return (size_t)(stack->stack_top - stack->stack);
 }
 
+void popBytesFromStack(Stack* stack, size_t count) {
+    ASSERT_STACK(stack);
+
+    stack->stack_top -= count * sizeof(uint8_t);
+    shrinkIfNeeded(stack);
+
+    ASSERT_STACK(stack);
+}
+
 #define DEFINE_PUSH_POP_GET_SET_OPERATIONS(type_name, type)       \
     void push ## type_name ## OnStack(Stack* stack, type value) { \
         ASSERT_STACK(stack);                                      \

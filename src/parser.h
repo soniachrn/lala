@@ -45,7 +45,7 @@ void dumpParser(const Parser* parser);
 void fdumpParser(FILE* out, const Parser* parser, int padding);
 
 void parse(Parser* parser);
-ValueType parseExpression(Parser* parser);
+ValueType* parseExpression(Parser* parser);
 
 
 #endif
