@@ -77,6 +77,7 @@ static void synchronize(Parser* parser);
 // Declaration
 static void parseDeclaration(Parser* parser);
 static void parseVariable(Parser* parser);
+static void parseFunction(Parser* parser);
 static ValueType* parseValueType(Parser* parser);
 
 // Statement
@@ -403,8 +404,9 @@ static void parseDeclaration(Parser* parser) {
     ASSERT_PARSER(parser);
 
     switch (peekNext(parser)) {
-        case TOKEN_VAR:   parseVariable(parser);  break;
-        default:          parseStatement(parser); break;
+        case TOKEN_VAR:      parseVariable(parser);  break;
+        case TOKEN_FUNCTION: parseFunction(parser);  break;
+        default:             parseStatement(parser); break;
     }
 
     if (parser->panic_mode) {
@@ -458,6 +460,43 @@ static void parseVariable(Parser* parser) {
             identifier_token.start
         );
     }
+
+    ASSERT_PARSER(parser);
+}
+
+static void parseFunction(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    // forceMatch(parser, TOKEN_FUNCTION);
+    // Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+
+    // // Parameters
+    // forceMatch(parser, TOKEN_LPAREN);
+    // while (!match(parser, TOKEN_RPAREN)) {
+
+    //     forceMatch(parser, TOKEN_VAR);
+    //     Token parameter_identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+
+    //     forceMatch(parser, TOKEN_COLON);
+    //     ValueType* parameter_type = parseValueType(parser);
+
+    // }
+    // 
+    // // Return type
+    // forceMatch(parser, TOKEN_COLON);
+    // ValueType* return_type = parseValueType(parser);
+
+    // // Jump to after the function body; fill the address later
+    // pushOpCodeOnStack(parser->chunk, OP_JUMP);
+    // size_t after_body_address_position_in_chunk = stackSize(parser->chunk);
+    // pushAddressOnStack(parser->chunk, (size_t)0);
+
+    // // Body
+    // parseStatement(parser);
+
+    // // Fill the jump-after-the-body address
+    // size_t after_body_address = stackSize(parser->chunk);
+    // setAddressOnStack(parser->chunk, after_body_address_position_in_chunk, after_body_address);
 
     ASSERT_PARSER(parser);
 }
@@ -715,7 +754,14 @@ static void parseBlock(Parser* parser) {
     while (!match(parser, TOKEN_RBRACE) && peekNext(parser) != TOKEN_END) {
         parseDeclaration(parser);
     }
+
+    assert(parser->scope->parent->stack_top);
+    size_t block_scope_locals_size = parser->scope->stack_top - parser->scope->parent->stack_top;
+    pushOpCodeOnStack(parser->chunk, OP_POP_BYTES);
+    pushAddressOnStack(parser->chunk, block_scope_locals_size);
+
     parser->scope = deleteScope(parser->scope);
+    assert(parser->scope);
 
     ASSERT_PARSER(parser);
 }

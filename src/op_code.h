@@ -10,11 +10,14 @@ typedef enum {
     // Empty
     OP_EMPTY,
 
-    // Push
+    // Stack
     OP_PUSH_TRUE,
     OP_PUSH_FALSE,
     OP_PUSH_INT,
     OP_PUSH_FLOAT,
+    OP_POP_BYTES,
+
+    // Heap
     OP_LOAD_CONSTANT,
     OP_DEFINE_ON_HEAP,
 

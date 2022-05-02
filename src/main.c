@@ -390,6 +390,7 @@ static void disassemble(LalaArguments arguments) {
                 ip += sizeof(uint8_t);
                 break;
 
+            case OP_POP_BYTES:
             case OP_GET_BYTE_FROM_STACK:
             case OP_GET_INT_FROM_STACK:
             case OP_GET_FLOAT_FROM_STACK:

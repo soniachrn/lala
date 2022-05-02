@@ -3,11 +3,14 @@
 
 const char* opCodeName(OpCode op_code) {
     switch (op_code) {
-        // Push
+        // Stack
         case OP_PUSH_TRUE:               return "push true";
         case OP_PUSH_FALSE:              return "push false";
         case OP_PUSH_INT:                return "push int";
         case OP_PUSH_FLOAT:              return "push float";
+        case OP_POP_BYTES:               return "pop bytes";
+
+        // Heap
         case OP_LOAD_CONSTANT:           return "load constant";
         case OP_DEFINE_ON_HEAP:          return "define on heap";
 

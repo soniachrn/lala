@@ -117,12 +117,14 @@ void interpret(VM* vm) {
 
     while (!isAtEnd(vm)) {
         switch ((OpCode)readByteFromSource(vm)) {
-            // Push
+            // Stack
             case OP_PUSH_TRUE:  PUSH_BYTE(1); break;
             case OP_PUSH_FALSE: PUSH_BYTE(0); break;
             case OP_PUSH_INT:   PUSH_INT(  readIntFromSource(  vm)); break;
             case OP_PUSH_FLOAT: PUSH_FLOAT(readFloatFromSource(vm)); break;
+            case OP_POP_BYTES:  popBytesFromStack(&vm->stack, readAddressFromSource(vm)); break;
 
+            // Heap  
             case OP_LOAD_CONSTANT: {
                 uint8_t constant_index = readByteFromSource(vm);
                 assert(constant_index < vm->constants->count);
