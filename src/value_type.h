@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "op_code.h"
+
 
 // ┌───────┐
 // │ Types │
@@ -64,9 +66,11 @@ void       deleteValueType(ValueType* value_type);
 const char* basicValueTypeName(BasicValueType basic_value_type);
 const char* valueTypeName(ValueType* value_type);
 
-size_t      valueTypeSize(ValueType* value_type);
-bool        isReferenceValueType(ValueType* value_type);
-bool        valueTypesEqual(ValueType* a, ValueType* b);
+size_t valueTypeSize(ValueType* value_type);
+bool   isReferenceValueType(ValueType* value_type);
+bool   valueTypesEqual(ValueType* a, ValueType* b);
+
+OpCode getOpSetOnStackForValueType(ValueType* value_type);
 
 
 #endif

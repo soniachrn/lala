@@ -158,3 +158,19 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
     }
 }
 
+OpCode getOpSetOnStackForValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:  return OP_SET_BYTE_ON_STACK;
+        case BASIC_VALUE_TYPE_INT:   return OP_SET_INT_ON_STACK;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_SET_FLOAT_ON_STACK;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+            return OP_SET_ADDRESS_ON_STACK;
+
+        default:
+            assert(false);
+    }
+}
+

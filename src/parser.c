@@ -121,18 +121,18 @@ static void validateOperatorTypes(
 //  Operator to OpCode 
 // ────────────────────
 
-static void pushOpCodeOnStack(Stack* stack, OpCode op_code) {
-    if (op_code != OP_EMPTY) {
-        pushByteOnStack(stack, (uint8_t)op_code);
-    }
-}
-
 static void emitOpCodesForTokenAndValueTypesCombination(
     Parser* parser,
     uint8_t arity,
     TokenType token_type,
     BasicValueType basic_value_type
 );
+
+static void pushOpCodeOnStack(Stack* stack, OpCode op_code) {
+    if (op_code != OP_EMPTY) {
+        pushByteOnStack(stack, (uint8_t)op_code);
+    }
+}
 
 
 // ┌──────────────────────────┐
@@ -540,11 +540,13 @@ static void parsePrint(Parser* parser) {
 static void parseAssignment(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    // Consume identifier and expression
     Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
     forceMatch(parser, TOKEN_EQUAL);
     Token expression_start_token = next(parser);
     ValueType* expression_value_type = parseExpression(parser);
 
+    // Find variable
     Variable variable;
     bool found_variable = accessVariableInScope(
         parser->scope,
@@ -553,6 +555,7 @@ static void parseAssignment(Parser* parser) {
         &variable
     );
 
+    // Make sure the variable is found
     if (!found_variable) {
         errorAt(
             parser,
@@ -565,6 +568,7 @@ static void parseAssignment(Parser* parser) {
         return;
     }
 
+    // Make sure variable and expression types match
     if (!valueTypesEqual(variable.type, expression_value_type)) {
         error(
             parser,
@@ -578,23 +582,8 @@ static void parseAssignment(Parser* parser) {
         return;
     }
 
-    OpCode op_code;
-    switch (variable.type->basic_type) {
-        case BASIC_VALUE_TYPE_BOOL:  op_code = OP_SET_BYTE_ON_STACK;  break;
-        case BASIC_VALUE_TYPE_INT:   op_code = OP_SET_INT_ON_STACK;   break;
-        case BASIC_VALUE_TYPE_FLOAT: op_code = OP_SET_FLOAT_ON_STACK; break;
-
-        case BASIC_VALUE_TYPE_STRING:
-        case BASIC_VALUE_TYPE_ARRAY:
-        case BASIC_VALUE_TYPE_MAP:
-            op_code = OP_SET_ADDRESS_ON_STACK;
-            break;
-
-        default:
-            assert(false);
-    }
-
-    pushOpCodeOnStack(parser->chunk, op_code);
+    // Set variable value on the stack
+    pushOpCodeOnStack(parser->chunk, getOpSetOnStackForValueType(variable.type));
     pushAddressOnStack(parser->chunk, variable.address_on_stack);
 
     ASSERT_PARSER(parser);
@@ -609,6 +598,7 @@ static void parseIf(Parser* parser){
     Token expression_start_token = next(parser);
     ValueType* condition_value_type = parseExpression(parser);
 
+    // Make sure condition is bool
     if (condition_value_type->basic_type != BASIC_VALUE_TYPE_BOOL) {
         error(
             parser,
@@ -648,6 +638,7 @@ static void parseWhile(Parser* parser){
     Token expression_start_token = next(parser);
     ValueType* condition_value_type = parseExpression(parser);
 
+    // Make sure condition is bool
     if (condition_value_type->basic_type != BASIC_VALUE_TYPE_BOOL) {
         error(
             parser,
@@ -696,6 +687,7 @@ static void parseDoWhile(Parser* parser){
     Token expression_start_token = next(parser);
     ValueType* condition_value_type = parseExpression(parser);
 
+    // Make sure condition is false
     if (condition_value_type->basic_type != BASIC_VALUE_TYPE_BOOL) {
         error(
             parser,
@@ -928,24 +920,12 @@ static ValueType* parsePostfix(Parser* parser) {
 
                 forceMatch(parser, TOKEN_RBRACKET);
 
-                switch (value_type->as.array.element_type->basic_type) {
-                    case BASIC_VALUE_TYPE_BOOL:
-                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_BYTE);
-                        break;
-                    case BASIC_VALUE_TYPE_INT:
-                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_INT);
-                        break;
-                    case BASIC_VALUE_TYPE_FLOAT:
-                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_FLOAT);
-                        break;
-                    case BASIC_VALUE_TYPE_STRING:
-                    case BASIC_VALUE_TYPE_ARRAY:
-                    case BASIC_VALUE_TYPE_MAP:
-                        pushOpCodeOnStack(parser->chunk, OP_SUBSCRIPT_ADDRESS);
-                        break;
-                    default:
-                        assert(false);
-                }
+                emitOpCodesForTokenAndValueTypesCombination(
+                    parser,
+                    1,
+                    TOKEN_LBRACKET,
+                    value_type->as.array.element_type->basic_type
+                );
 
                 value_type = value_type->as.array.element_type;
                 break;
@@ -1189,34 +1169,36 @@ typedef struct {
     bool types_have_to_match;
 } OperatorTypeRules;
 
-#define ANY { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_STRING }
-#define B   { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_BOOL }
-#define I   { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_INT }
-#define IF  { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_FLOAT }
-#define IFS { BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_STRING, BASIC_VALUE_TYPE_STRING }
+#define B    { BASIC_VALUE_TYPE_BOOL }
+#define I    { BASIC_VALUE_TYPE_INT }
+#define IF   { BASIC_VALUE_TYPE_INT,  BASIC_VALUE_TYPE_FLOAT }
+#define IFS  { BASIC_VALUE_TYPE_INT,  BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_STRING }
+#define BIFS { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_INT,   BASIC_VALUE_TYPE_FLOAT, BASIC_VALUE_TYPE_STRING }
+#define A    { BASIC_VALUE_TYPE_ARRAY }
 
 OperatorTypeRules operator_type_rules[] = {
-    [TOKEN_OR]                = { B,    B,    true  },
-    [TOKEN_AND]               = { B,    B,    true  },
-    [TOKEN_EQUAL_EQUAL]       = { ANY,  ANY,  true  },
-    [TOKEN_EXCLAMATION_EQUAL] = { ANY,  ANY,  true  },
-    [TOKEN_GREATER_EQUAL]     = { IFS,  IFS,  true  },
-    [TOKEN_LESS_EQUAL]        = { IFS,  IFS,  true  },
-    [TOKEN_GREATER]           = { IFS,  IFS,  true  },
-    [TOKEN_LESS]              = { IFS,  IFS,  true  },
-    [TOKEN_PLUS]              = { IFS,  IFS,  true  },
-    [TOKEN_MINUS]             = { IF,   IF,   true  },
-    [TOKEN_STAR]              = { IF,   IF,   true  },
-    [TOKEN_SLASH]             = { IF,   IF,   true  },
-    [TOKEN_PERCENT]           = { IF,   I,    false },
-    [TOKEN_EXCLAMATION]       = { B,    B,    true  },
+    [TOKEN_OR]                = { B,     B,     true  },
+    [TOKEN_AND]               = { B,     B,     true  },
+    [TOKEN_EQUAL_EQUAL]       = { BIFS,  BIFS,  true  },
+    [TOKEN_EXCLAMATION_EQUAL] = { BIFS,  BIFS,  true  },
+    [TOKEN_GREATER_EQUAL]     = { IFS,   IFS,   true  },
+    [TOKEN_LESS_EQUAL]        = { IFS,   IFS,   true  },
+    [TOKEN_GREATER]           = { IFS,   IFS,   true  },
+    [TOKEN_LESS]              = { IFS,   IFS,   true  },
+    [TOKEN_PLUS]              = { IFS,   IFS,   true  },
+    [TOKEN_MINUS]             = { IF,    IF,    true  },
+    [TOKEN_STAR]              = { IF,    IF,    true  },
+    [TOKEN_SLASH]             = { IF,    IF,    true  },
+    [TOKEN_PERCENT]           = { IF,    I,     false },
+    [TOKEN_EXCLAMATION]       = { B,     B,     true  },
+    [TOKEN_LBRACKET]          = { A,     I,     false },  // Subscript
 };
 
+#undef BIFS
 #undef IFS
 #undef IF
 #undef I
 #undef B
-#undef ANY
 
 static bool validateOperandType(
     BasicValueType operand_type,
@@ -1285,55 +1267,66 @@ static void validateOperatorTypes(
 #define KEY(arity, token_type, value_type) ((token_type * 4 + value_type) * 3 + arity)
 
 OpCode token_and_value_type_to_opcodes[][2] = {
-    [KEY(2, TOKEN_OR,                 BASIC_VALUE_TYPE_BOOL)  ] = { OP_OR,              OP_EMPTY       },
+    // Logic
+    [KEY(2, TOKEN_OR,                 BASIC_VALUE_TYPE_BOOL)  ] = { OP_OR,                OP_EMPTY       },
+    [KEY(2, TOKEN_AND,                BASIC_VALUE_TYPE_BOOL)  ] = { OP_AND,               OP_EMPTY       },
+    
+    // Comparison
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_EQUALS_BOOL,       OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_INT)   ] = { OP_EQUALS_INT,        OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_FLOAT) ] = { OP_EQUALS_FLOAT,      OP_EMPTY       },
+    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_STRING)] = { OP_EQUALS_STRING,     OP_EMPTY       },
+    
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_BOOL)  ] = { OP_EQUALS_BOOL,       OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_INT)   ] = { OP_EQUALS_INT,        OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_FLOAT) ] = { OP_EQUALS_FLOAT,      OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_STRING)] = { OP_EQUALS_STRING,     OP_NEGATE_BOOL },
+    
+    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_INT)   ] = { OP_LESS_INT,          OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_FLOAT) ] = { OP_LESS_FLOAT,        OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_STRING)] = { OP_LESS_STRING,       OP_NEGATE_BOOL },
+    
+    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_INT)   ] = { OP_GREATER_INT,       OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_FLOAT) ] = { OP_GREATER_FLOAT,     OP_NEGATE_BOOL },
+    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_STRING)] = { OP_GREATER_STRING,    OP_NEGATE_BOOL },
+    
+    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_INT)   ] = { OP_GREATER_INT,       OP_EMPTY       },
+    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_FLOAT) ] = { OP_GREATER_FLOAT,     OP_EMPTY       },
+    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_STRING)] = { OP_GREATER_STRING,    OP_EMPTY       },
+    
+    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_INT)   ] = { OP_LESS_INT,          OP_EMPTY       },
+    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_LESS_FLOAT,        OP_EMPTY       },
+    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_STRING)] = { OP_LESS_STRING,       OP_EMPTY       },
+    
+    // Arithmetics
+    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_INT)   ] = { OP_ADD_INT,           OP_EMPTY       },
+    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_ADD_FLOAT,         OP_EMPTY       },
+    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_STRING)] = { OP_CONCATENATE,       OP_EMPTY       },
+    
+    [KEY(2, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,        OP_ADD_INT     },
+    [KEY(2, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,      OP_ADD_FLOAT   },
+    
+    [KEY(2, TOKEN_STAR,               BASIC_VALUE_TYPE_INT)   ] = { OP_MULTIPLY_INT,      OP_EMPTY       },
+    [KEY(2, TOKEN_STAR,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_MULTIPLY_FLOAT,    OP_EMPTY       },
+    
+    [KEY(2, TOKEN_SLASH,              BASIC_VALUE_TYPE_INT)   ] = { OP_DIVIDE_INT,        OP_EMPTY       },
+    [KEY(2, TOKEN_SLASH,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_DIVIDE_FLOAT,      OP_EMPTY       },
+    
+    [KEY(2, TOKEN_PERCENT,            BASIC_VALUE_TYPE_INT)   ] = { OP_MODULO_INT,        OP_EMPTY       },
+    [KEY(2, TOKEN_PERCENT,            BASIC_VALUE_TYPE_FLOAT) ] = { OP_MODULO_FLOAT,      OP_EMPTY       },
 
-    [KEY(2, TOKEN_AND,                BASIC_VALUE_TYPE_BOOL)  ] = { OP_AND,             OP_EMPTY       },
-    
-    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_EQUALS_BOOL,     OP_EMPTY       },
-    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_INT)   ] = { OP_EQUALS_INT,      OP_EMPTY       },
-    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_FLOAT) ] = { OP_EQUALS_FLOAT,    OP_EMPTY       },
-    [KEY(2, TOKEN_EQUAL_EQUAL,        BASIC_VALUE_TYPE_STRING)] = { OP_EQUALS_STRING,   OP_EMPTY       },
-    
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_BOOL)  ] = { OP_EQUALS_BOOL,     OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_INT)   ] = { OP_EQUALS_INT,      OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_FLOAT) ] = { OP_EQUALS_FLOAT,    OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_EXCLAMATION_EQUAL,  BASIC_VALUE_TYPE_STRING)] = { OP_EQUALS_STRING,   OP_NEGATE_BOOL },
-    
-    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_INT)   ] = { OP_LESS_INT,        OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_FLOAT) ] = { OP_LESS_FLOAT,      OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_GREATER_EQUAL,      BASIC_VALUE_TYPE_STRING)] = { OP_LESS_STRING,     OP_NEGATE_BOOL },
-    
-    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_INT)   ] = { OP_GREATER_INT,     OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_FLOAT) ] = { OP_GREATER_FLOAT,   OP_NEGATE_BOOL },
-    [KEY(2, TOKEN_LESS_EQUAL,         BASIC_VALUE_TYPE_STRING)] = { OP_GREATER_STRING,  OP_NEGATE_BOOL },
-    
-    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_INT)   ] = { OP_GREATER_INT,     OP_EMPTY       },
-    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_FLOAT) ] = { OP_GREATER_FLOAT,   OP_EMPTY       },
-    [KEY(2, TOKEN_GREATER,            BASIC_VALUE_TYPE_STRING)] = { OP_GREATER_STRING,  OP_EMPTY       },
-    
-    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_INT)   ] = { OP_LESS_INT,        OP_EMPTY       },
-    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_LESS_FLOAT,      OP_EMPTY       },
-    [KEY(2, TOKEN_LESS,               BASIC_VALUE_TYPE_STRING)] = { OP_LESS_STRING,     OP_EMPTY       },
-    
-    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_INT)   ] = { OP_ADD_INT,         OP_EMPTY       },
-    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_ADD_FLOAT,       OP_EMPTY       },
-    [KEY(2, TOKEN_PLUS,               BASIC_VALUE_TYPE_STRING)] = { OP_CONCATENATE,     OP_EMPTY       },
-    
-    [KEY(2, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,      OP_ADD_INT     },
-    [KEY(2, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,    OP_ADD_FLOAT   },
-    
-    [KEY(2, TOKEN_STAR,               BASIC_VALUE_TYPE_INT)   ] = { OP_MULTIPLY_INT,    OP_EMPTY       },
-    [KEY(2, TOKEN_STAR,               BASIC_VALUE_TYPE_FLOAT) ] = { OP_MULTIPLY_FLOAT,  OP_EMPTY       },
-    
-    [KEY(2, TOKEN_SLASH,              BASIC_VALUE_TYPE_INT)   ] = { OP_DIVIDE_INT,      OP_EMPTY       },
-    [KEY(2, TOKEN_SLASH,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_DIVIDE_FLOAT,    OP_EMPTY       },
-    
-    [KEY(2, TOKEN_PERCENT,            BASIC_VALUE_TYPE_INT)   ] = { OP_MODULO_INT,      OP_EMPTY       },
-    [KEY(2, TOKEN_PERCENT,            BASIC_VALUE_TYPE_FLOAT) ] = { OP_MODULO_FLOAT,    OP_EMPTY       },
+    // Unary
+    [KEY(1, TOKEN_EXCLAMATION,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_NEGATE_BOOL,       OP_EMPTY       },
+    [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,        OP_EMPTY       },
+    [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,      OP_EMPTY       },
 
-    [KEY(1, TOKEN_EXCLAMATION,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_NEGATE_BOOL,     OP_EMPTY       },
-    [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,      OP_EMPTY       },
-    [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,    OP_EMPTY       },
+    // Subscript
+    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_BOOL)  ] = { OP_SUBSCRIPT_BYTE,    OP_EMPTY       },
+    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_INT)   ] = { OP_SUBSCRIPT_INT,     OP_EMPTY       },
+    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_FLOAT) ] = { OP_SUBSCRIPT_FLOAT,   OP_EMPTY       },
+    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_STRING)] = { OP_SUBSCRIPT_ADDRESS, OP_EMPTY       },
+    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_ARRAY) ] = { OP_SUBSCRIPT_ADDRESS, OP_EMPTY       },
+    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_MAP)   ] = { OP_SUBSCRIPT_ADDRESS, OP_EMPTY       },
 };
 
 static void emitOpCodesForTokenAndValueTypesCombination(
