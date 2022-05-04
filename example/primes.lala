@@ -1,0 +1,28 @@
+
+function is-prime(var value: int): bool {
+    if (value < 2)
+        return false
+
+    var i: int = 2
+    while (i <= value / 2) {
+        if (value % i == 0)
+            return false
+        i = i + 1
+    }
+
+    return true
+}
+
+function print-primes-in-range(var start: int, var end: int): void {
+    print 'Primes from ' + start: string + ' to ' + end: string + ':'
+
+    var i: int = start
+    while (i <= end) {
+        if is-prime(i)
+            print i
+        i = i + 1
+    }
+}
+
+print-primes-in-range(0, 100)
+

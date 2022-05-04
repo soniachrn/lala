@@ -10,6 +10,7 @@
 // └───────────────────────┘
 
 ValueType VALUE_TYPE_INVALID = { BASIC_VALUE_TYPE_INVALID, {{NULL}}, NULL };
+ValueType VALUE_TYPE_VOID    = { BASIC_VALUE_TYPE_VOID,    {{NULL}}, NULL };
 ValueType VALUE_TYPE_BOOL    = { BASIC_VALUE_TYPE_BOOL,    {{NULL}}, NULL };
 ValueType VALUE_TYPE_INT     = { BASIC_VALUE_TYPE_INT,     {{NULL}}, NULL };
 ValueType VALUE_TYPE_FLOAT   = { BASIC_VALUE_TYPE_FLOAT,   {{NULL}}, NULL };
@@ -27,17 +28,55 @@ ValueType* createArrayValueType(ValueType* element_type) {
     return type;
 }
 
+ValueType* createFunctionValueType() {
+    ValueType* type = calloc(1, sizeof(ValueType));
+    type->basic_type = BASIC_VALUE_TYPE_FUNCTION;
+    type->as.function.arity = 0;
+    type->as.function.parameters_size = 0;
+    type->as.function.parameter_types = NULL;
+    type->as.function.return_type = NULL;
+    type->name = NULL;
+    return type;
+}
+
+void addParameterToFunctionValueType(
+    FunctionValueType* function,
+    ValueType* parameter
+) {
+    assert(function);
+    assert(function->arity < 255);
+
+    function->arity += 1;
+    function->parameters_size += valueTypeSize(parameter);
+    function->parameter_types = realloc(
+        function->parameter_types,
+        function->arity * sizeof(ValueType*)
+    );
+    function->parameter_types[function->arity - 1] = parameter;
+}
+
 void deleteValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_INVALID:
+        case BASIC_VALUE_TYPE_VOID:
         case BASIC_VALUE_TYPE_BOOL:
         case BASIC_VALUE_TYPE_INT:
         case BASIC_VALUE_TYPE_FLOAT:
         case BASIC_VALUE_TYPE_STRING:
             assert(false);
+
+        case BASIC_VALUE_TYPE_FUNCTION:
+            if (value_type->as.function.parameter_types) {
+                free(value_type->as.function.parameter_types);
+            }
+            break;
+
         default:
             break;
     }
+
 
     if (value_type->name)
         free(value_type->name);
@@ -46,46 +85,87 @@ void deleteValueType(ValueType* value_type) {
 
 const char* basicValueTypeName(BasicValueType basic_value_type) {
     switch (basic_value_type) {
-        case BASIC_VALUE_TYPE_INVALID: return "INVALID TYPE";
-        case BASIC_VALUE_TYPE_BOOL:    return "bool";
-        case BASIC_VALUE_TYPE_INT:     return "int";
-        case BASIC_VALUE_TYPE_FLOAT:   return "float";
-        case BASIC_VALUE_TYPE_STRING:  return "string";
-        case BASIC_VALUE_TYPE_ARRAY:   return "array";
-        case BASIC_VALUE_TYPE_MAP:     return "map";
-        default:                       return "INVALID TYPE";
+        case BASIC_VALUE_TYPE_INVALID:  return "INVALID TYPE";
+        case BASIC_VALUE_TYPE_VOID:     return "void";
+        case BASIC_VALUE_TYPE_BOOL:     return "bool";
+        case BASIC_VALUE_TYPE_INT:      return "int";
+        case BASIC_VALUE_TYPE_FLOAT:    return "float";
+        case BASIC_VALUE_TYPE_STRING:   return "string";
+        case BASIC_VALUE_TYPE_ARRAY:    return "array";
+        case BASIC_VALUE_TYPE_MAP:      return "map";
+        case BASIC_VALUE_TYPE_FUNCTION: return "function";
+        default:                        return "INVALID TYPE";
     }
 }
 
 const char* valueTypeName(ValueType* value_type) {
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_INVALID:
+        case BASIC_VALUE_TYPE_VOID:
         case BASIC_VALUE_TYPE_BOOL:
         case BASIC_VALUE_TYPE_INT:
         case BASIC_VALUE_TYPE_FLOAT:
         case BASIC_VALUE_TYPE_STRING:
             return basicValueTypeName(value_type->basic_type);
 
+#define INIT_VALUE_TYPE_NAME_IF_NEEDED(...)                           \
+    if (!value_type->name) {                                          \
+        int buffer_size = 128;                                        \
+        value_type->name = calloc((size_t)buffer_size, sizeof(char));         \
+        int length = snprintf(                                        \
+            value_type->name,                                         \
+            buffer_size,                                              \
+            __VA_ARGS__                                               \
+        ) + 1;                                                        \
+        value_type->name = realloc(value_type->name, (size_t)length); \
+        if (length > buffer_size) {                                   \
+            snprintf(value_type->name, length, __VA_ARGS__);          \
+        }                                                             \
+    }
+
         case BASIC_VALUE_TYPE_ARRAY:
-            if (!value_type->name) {
-                value_type->name = calloc(128, sizeof(char));
-                int length = snprintf(
-                    value_type->name, 128, "[%s]",
-                    valueTypeName(value_type->as.array.element_type)
-                );
-                value_type->name = realloc(value_type->name, (size_t)length * sizeof(char) + 1);
-            }
+            INIT_VALUE_TYPE_NAME_IF_NEEDED(
+                "[%s]", 
+                valueTypeName(value_type->as.array.element_type)
+            );
             return value_type->name;
 
         case BASIC_VALUE_TYPE_MAP:
+            INIT_VALUE_TYPE_NAME_IF_NEEDED(
+                "{%s:%s}",
+                valueTypeName(value_type->as.map.key_type),
+                valueTypeName(value_type->as.map.element_type)
+            );
+            return value_type->name;
+
+#undef INIT_VALUE_TYPE_NAME
+
+        case BASIC_VALUE_TYPE_FUNCTION:
             if (!value_type->name) {
-                value_type->name = calloc(256, sizeof(char));
-                int length = snprintf(
-                    value_type->name, 256, "{%s:%s}",
-                    valueTypeName(value_type->as.map.key_type),
-                    valueTypeName(value_type->as.map.element_type)
+                FunctionValueType function = value_type->as.function;
+
+                value_type->name = NULL;
+                size_t length = 0;
+                FILE* stream = open_memstream(&value_type->name, &length);
+
+                fprintf(stream, "function (");
+                for (uint8_t i = 0; i < function.arity; ++i) {
+                    fprintf(
+                        stream,
+                        "%s",
+                        valueTypeName(function.parameter_types[i])
+                    );
+                    if (i < function.arity - 1) {
+                        fprintf(stream, ", ");
+                    }
+                }
+                fprintf(
+                    stream, 
+                    "): %s", 
+                    valueTypeName(function.return_type)
                 );
-                value_type->name = realloc(value_type->name, (size_t)length * sizeof(char) + 1);
+
+                fclose(stream);
             }
             return value_type->name;
 
@@ -103,8 +183,10 @@ size_t valueTypeSize(ValueType* value_type) {
         case BASIC_VALUE_TYPE_STRING:
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
             return sizeof(size_t);
 
+        case BASIC_VALUE_TYPE_VOID:
         default:
             assert(false);
     }
@@ -115,6 +197,7 @@ bool isReferenceValueType(ValueType* value_type) {
         case BASIC_VALUE_TYPE_BOOL:
         case BASIC_VALUE_TYPE_INT:
         case BASIC_VALUE_TYPE_FLOAT:
+        case BASIC_VALUE_TYPE_FUNCTION:
             return false;
 
         case BASIC_VALUE_TYPE_STRING:
@@ -122,6 +205,7 @@ bool isReferenceValueType(ValueType* value_type) {
         case BASIC_VALUE_TYPE_MAP:
             return true;
 
+        case BASIC_VALUE_TYPE_VOID:
         default:
             assert(false);
     }
@@ -136,6 +220,7 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
     }
 
     switch (a->basic_type) {
+        case BASIC_VALUE_TYPE_VOID:
         case BASIC_VALUE_TYPE_BOOL:
         case BASIC_VALUE_TYPE_INT:
         case BASIC_VALUE_TYPE_FLOAT:
@@ -143,13 +228,39 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
             return true;
 
         case BASIC_VALUE_TYPE_ARRAY:
-            return valueTypesEqual(a->as.array.element_type, b->as.array.element_type);
+            return valueTypesEqual(
+                a->as.array.element_type,
+                b->as.array.element_type
+            );
 
         case BASIC_VALUE_TYPE_MAP:
             return (
-                valueTypesEqual(a->as.map.key_type,     b->as.map.key_type) &&
-                valueTypesEqual(a->as.map.element_type, b->as.map.element_type)
+                valueTypesEqual(
+                    a->as.map.key_type,
+                    b->as.map.key_type
+                ) &&
+                valueTypesEqual(
+                    a->as.map.element_type,
+                    b->as.map.element_type
+                )
             );
+
+        case BASIC_VALUE_TYPE_FUNCTION: {
+            bool equal = (
+                a->as.function.arity == b->as.function.arity &&
+                valueTypesEqual(
+                    a->as.function.return_type,
+                    b->as.function.return_type
+                )
+            );
+            for (uint8_t i = 0; equal && i < a->as.function.arity; ++i) {
+                equal &= valueTypesEqual(
+                    a->as.function.parameter_types[i],
+                    b->as.function.parameter_types[i]
+                );
+            }
+            return equal;
+        }
 
         case BASIC_VALUE_TYPE_INVALID:
             assert(false);
@@ -158,16 +269,38 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
     }
 }
 
-OpCode getOpSetOnStackForValueType(ValueType* value_type) {
+OpCode getOpPopForValueType(ValueType* value_type) {
     switch (value_type->basic_type) {
-        case BASIC_VALUE_TYPE_BOOL:  return OP_SET_BYTE_ON_STACK;
-        case BASIC_VALUE_TYPE_INT:   return OP_SET_INT_ON_STACK;
-        case BASIC_VALUE_TYPE_FLOAT: return OP_SET_FLOAT_ON_STACK;
+        case BASIC_VALUE_TYPE_BOOL:  return OP_POP_BYTE;
+        case BASIC_VALUE_TYPE_INT:   return OP_POP_INT;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_POP_FLOAT;
 
         case BASIC_VALUE_TYPE_STRING:
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
-            return OP_SET_ADDRESS_ON_STACK;
+        case BASIC_VALUE_TYPE_FUNCTION:
+            return OP_POP_ADDRESS;
+
+        case BASIC_VALUE_TYPE_VOID:
+            return OP_EMPTY;
+
+        default:
+            assert(false);
+    }
+}
+
+OpCode getOpReturnForValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_VOID:  return OP_RETURN_VOID;
+        case BASIC_VALUE_TYPE_BOOL:  return OP_RETURN_BYTE;
+        case BASIC_VALUE_TYPE_INT:   return OP_RETURN_INT;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_RETURN_FLOAT;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+            return OP_RETURN_ADDRESS;
 
         default:
             assert(false);

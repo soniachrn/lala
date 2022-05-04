@@ -97,7 +97,7 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
 
         // stack
         printf("  stack = *(%p) [\n", (const void*)stack->stack);
-        for (size_t i = 0; i < MIN(stack->capacity, (size_t)64);) {
+        for (size_t i = 0; i < MIN(stack->capacity, (size_t)128);) {
             printf("    %.2zu:", i);
             for (size_t j = 0; j < 8; ++j) {
                 printf(" %02X", stack->stack[i]);
@@ -191,6 +191,7 @@ void popBytesFromStack(Stack* stack, size_t count) {
                                                                   \
         if (address + sizeof(type) > stackSize(stack)) {          \
             /* TODO: error */                                     \
+            dumpStack(stack); \
             assert(false);                                        \
         }                                                         \
                                                                   \

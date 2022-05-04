@@ -3,11 +3,19 @@
 
 const char* opCodeName(OpCode op_code) {
     switch (op_code) {
+        // Empty
+        case OP_EMPTY:                   return "empty";
+
         // Stack
         case OP_PUSH_TRUE:               return "push true";
         case OP_PUSH_FALSE:              return "push false";
         case OP_PUSH_INT:                return "push int";
         case OP_PUSH_FLOAT:              return "push float";
+        case OP_PUSH_ADDRESS:            return "push address";
+        case OP_POP_BYTE:                return "pop byte";
+        case OP_POP_INT:                 return "pop int";
+        case OP_POP_FLOAT:               return "pop float";
+        case OP_POP_ADDRESS:             return "pop address";
         case OP_POP_BYTES:               return "pop bytes";
 
         // Heap
@@ -53,16 +61,26 @@ const char* opCodeName(OpCode op_code) {
         case OP_CAST_INT_TO_STRING:      return "cast int to string";
         case OP_CAST_FLOAT_TO_STRING:    return "cast float to string";
 
-        // Local variables
-        case OP_GET_BYTE_FROM_STACK:     return "get byte from stack";
-        case OP_GET_INT_FROM_STACK:      return "get int from stack";
-        case OP_GET_FLOAT_FROM_STACK:    return "get float from stack";
-        case OP_GET_ADDRESS_FROM_STACK:  return "get address from stack";
+        // Variables
+        case OP_GET_LOCAL_BYTE:           return "get local byte";
+        case OP_GET_LOCAL_INT:            return "get local int";
+        case OP_GET_LOCAL_FLOAT:          return "get local float";
+        case OP_GET_LOCAL_ADDRESS:        return "get local address";
 
-        case OP_SET_BYTE_ON_STACK:       return "set byte on stack";
-        case OP_SET_INT_ON_STACK:        return "set int on stack";
-        case OP_SET_FLOAT_ON_STACK:      return "set float on stack";
-        case OP_SET_ADDRESS_ON_STACK:    return "set address on stack";
+        case OP_SET_LOCAL_BYTE:           return "set local byte";
+        case OP_SET_LOCAL_INT:            return "set local int";
+        case OP_SET_LOCAL_FLOAT:          return "set local float";
+        case OP_SET_LOCAL_ADDRESS:        return "set local address";
+
+        case OP_GET_GLOBAL_BYTE:           return "get global byte";
+        case OP_GET_GLOBAL_INT:            return "get global int";
+        case OP_GET_GLOBAL_FLOAT:          return "get global float";
+        case OP_GET_GLOBAL_ADDRESS:        return "get global address";
+
+        case OP_SET_GLOBAL_BYTE:           return "set global byte";
+        case OP_SET_GLOBAL_INT:            return "set global int";
+        case OP_SET_GLOBAL_FLOAT:          return "set global float";
+        case OP_SET_GLOBAL_ADDRESS:        return "set global address";
 
         // Print
         case OP_PRINT_BOOL:              return "print bool";
@@ -75,8 +93,13 @@ const char* opCodeName(OpCode op_code) {
         case OP_JUMP_IF_TRUE:            return "jump if true";
         case OP_JUMP_IF_FALSE:           return "jump if false";
 
-        // Empty
-        case OP_EMPTY:                   return "empty";
+        // Functions
+        case OP_CALL:                    return "call";
+        case OP_RETURN_VOID:             return "return void";
+        case OP_RETURN_BYTE:             return "return byte";
+        case OP_RETURN_INT:              return "return int";
+        case OP_RETURN_FLOAT:            return "return float";
+        case OP_RETURN_ADDRESS:          return "return address";
 
         // Array
         case OP_SUBSCRIPT_BYTE:          return "subscript byte";

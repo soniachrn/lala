@@ -72,6 +72,7 @@ typedef enum {
     TOKEN_STRUCTURE,
     TOKEN_TRUE,
     TOKEN_VAR,
+    TOKEN_VOID,
     TOKEN_WHILE,
 
     // Complex

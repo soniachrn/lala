@@ -12,6 +12,9 @@
 // │ Macros │
 // └────────┘
 
+#define FUNCTION_ADDRESS_POSITION_IN_CALL_FRAME 0
+#define   RETURN_ADDRESS_POSITION_IN_CALL_FRAME sizeof(size_t)
+
 #define EPSILON 1e-10
 
 
@@ -19,14 +22,22 @@
 // │ Types │
 // └───────┘
 
+struct CallFrame {
+    struct CallFrame* parent;
+    size_t stack_offset;
+};
+typedef struct CallFrame CallFrame;
+
 typedef struct {
     size_t   source_size;
     uint8_t* source;
     uint8_t* ip;
 
     Constants* constants;
-    Stack stack;
-    Heap heap;
+    Stack      stack;
+    Heap       heap;
+
+    CallFrame* call_frame;
 } VM;
 
 

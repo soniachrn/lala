@@ -78,7 +78,7 @@ statement       : print
                 ;
 print           : PRINT expression ;
 assert          : ASSERT expression ;
-assignment      : ID assign-op expression ;
+assignment      : postfix assign-op expression ;  # Compiler should force this postfix to end with one of: primary, subscript, member access
 assign-op       : EQUAL
                 | PLUS-EQUAL
                 | MINUS-EQUAL

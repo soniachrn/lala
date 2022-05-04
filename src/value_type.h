@@ -14,12 +14,14 @@
 
 typedef enum {
     BASIC_VALUE_TYPE_INVALID,
+    BASIC_VALUE_TYPE_VOID,
     BASIC_VALUE_TYPE_BOOL,
     BASIC_VALUE_TYPE_INT,
     BASIC_VALUE_TYPE_FLOAT,
     BASIC_VALUE_TYPE_STRING,
     BASIC_VALUE_TYPE_ARRAY,
     BASIC_VALUE_TYPE_MAP,
+    BASIC_VALUE_TYPE_FUNCTION,
     // VALUE_USER_DEFINED,
 } BasicValueType;
 
@@ -35,11 +37,19 @@ typedef struct {
     ValueType* element_type;
 } MapValueType;
 
+typedef struct {
+    uint8_t arity;
+    size_t parameters_size;
+    ValueType** parameter_types;
+    ValueType* return_type;
+} FunctionValueType;
+
 struct ValueType {
     BasicValueType basic_type;
     union {
-        ArrayValueType array;
-        MapValueType   map;
+        ArrayValueType    array;
+        MapValueType      map;
+        FunctionValueType function;
     } as;
     char* name;
 };
@@ -50,6 +60,7 @@ struct ValueType {
 // └────────────────────────┘
 
 extern ValueType VALUE_TYPE_INVALID;
+extern ValueType VALUE_TYPE_VOID;
 extern ValueType VALUE_TYPE_BOOL;
 extern ValueType VALUE_TYPE_INT;
 extern ValueType VALUE_TYPE_FLOAT;
@@ -61,7 +72,12 @@ extern ValueType VALUE_TYPE_STRING;
 // └───────────────────────┘
 
 ValueType* createArrayValueType(ValueType* element_type);
-void       deleteValueType(ValueType* value_type);
+ValueType* createFunctionValueType();
+void addParameterToFunctionValueType(
+    FunctionValueType* function,
+    ValueType* parameter
+);
+void deleteValueType(ValueType* value_type);
 
 const char* basicValueTypeName(BasicValueType basic_value_type);
 const char* valueTypeName(ValueType* value_type);
@@ -70,7 +86,8 @@ size_t valueTypeSize(ValueType* value_type);
 bool   isReferenceValueType(ValueType* value_type);
 bool   valueTypesEqual(ValueType* a, ValueType* b);
 
-OpCode getOpSetOnStackForValueType(ValueType* value_type);
+OpCode getOpPopForValueType(ValueType* value_type);
+OpCode getOpReturnForValueType(ValueType* value_type);
 
 
 #endif

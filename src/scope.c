@@ -45,8 +45,18 @@ Scope* createScope(Scope* parent) {
 
     initHashMap(&scope->symbol_table);
     scope->variables_count = 0;
+    
+    scope->return_type = NULL;
 
     ASSERT_SCOPE(scope);
+    return scope;
+}
+
+Scope* createScopeInNewCallFrame(Scope* parent) {
+    Scope* scope = createScope(parent);
+    // Start scope addressing from 0 and reserve space 
+    // for function address and for return address.
+    scope->stack_top = sizeof(size_t) * 2;
     return scope;
 }
 
@@ -111,7 +121,7 @@ void fdumpScope(FILE* out, const Scope* scope, int padding) {
 #undef printf
 }
 
-bool declareVariableInScope(
+VariableDeclarationResult declareVariableInScope(
     Scope* scope,
     const char* name,
     size_t name_length,
@@ -120,15 +130,20 @@ bool declareVariableInScope(
     ASSERT_SCOPE(scope);
 
     if (scope->variables_count == MAX_VARIABLES_IN_SCOPE) {
-        return false;
+        return VARDECL_TOO_MANY_VARIABLES_IN_A_SCOPE;
     }
 
-    if (hashMapContains(&scope->symbol_table, name, name_length)) {
-        return false;
+    Variable variable;
+    if (accessVariableInScope(scope, name, name_length, &variable)) {
+        return VARDECL_VARIABLE_REDECLARATION;
     }
 
-    scope->variables[scope->variables_count].type = type;
-    scope->variables[scope->variables_count].address_on_stack = scope->stack_top;
+    scope->variables[scope->variables_count] = (Variable){
+        scope->parent ? LOCAL_VARIABLE : GLOBAL_VARIABLE,
+        type,
+        scope->stack_top
+    };
+
     scope->stack_top += valueTypeSize(type);
 
     assert(storeInHashMap(
@@ -140,7 +155,28 @@ bool declareVariableInScope(
     scope->variables_count++;
 
     ASSERT_SCOPE(scope);
-    return true;
+    return VARDECL_SUCCESS;
+}
+
+static const Scope* getGlobalScope(const Scope* scope) {
+    ASSERT_SCOPE(scope);
+
+    const Scope* root_scope = scope;
+    while (root_scope->parent != NULL) {
+        root_scope = root_scope->parent;
+    }
+    return root_scope;
+}
+
+static const Scope* getCallFrameRootScope(const Scope* scope) {
+    ASSERT_SCOPE(scope);
+
+    for (const Scope* i = scope; i != NULL; i = i->parent) {
+        if (i->return_type) {
+            return i;
+        }
+    }
+    return NULL;
 }
 
 bool accessVariableInScope(
@@ -151,16 +187,71 @@ bool accessVariableInScope(
 ) {
     ASSERT_SCOPE(scope);
 
+    const Scope* call_frame_root_scope = getCallFrameRootScope(scope);
     size_t variable_index;
     bool found = false;
+
     for (const Scope* i = scope; !found && i != NULL; i = i->parent) {
-        found = getFromHashMap(&i->symbol_table, name, name_length, &variable_index);
+        found = getFromHashMap(
+            &i->symbol_table,
+            name,
+            name_length,
+            &variable_index
+        );
         if (found) {
             *variable = i->variables[variable_index];
         }
+        if (i == call_frame_root_scope) {
+            break;
+        }
     }
+
+    if (!found) {
+        const Scope* global_scope = getGlobalScope(scope);
+        found = getFromHashMap(
+            &global_scope->symbol_table,
+            name,
+            name_length,
+            &variable_index
+        );
+        if (found) {
+            *variable = global_scope->variables[variable_index];
+        }
+    } 
 
     ASSERT_SCOPE(scope);
     return found;
+}
+
+// bool accessVariableInScope(
+//     const Scope* scope,
+//     const char* name,
+//     size_t name_length,
+//     Variable* variable
+// ) {
+//     ASSERT_SCOPE(scope);
+// 
+//     size_t variable_index;
+//     bool found = false;
+//     for (const Scope* i = scope; !found && i != NULL; i = i->parent) {
+//         found = getFromHashMap(&i->symbol_table, name, name_length, &variable_index);
+//         if (found) {
+//             *variable = i->variables[variable_index];
+//         }
+//     }
+// 
+//     ASSERT_SCOPE(scope);
+//     return found;
+// }
+
+ValueType* getReturnType(const Scope* scope) {
+    ASSERT_SCOPE(scope);
+
+    const Scope* call_frame_root_scope = getCallFrameRootScope(scope);
+    if (call_frame_root_scope) {
+        return call_frame_root_scope->return_type;
+    } else {
+        return NULL;
+    }
 }
 

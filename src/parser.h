@@ -34,6 +34,15 @@ typedef struct {
     Constants constants;
 } Parser;
 
+typedef struct {
+    bool ends_with_return;
+} StatementProperties;
+
+typedef enum {
+    EXPRESSION,
+    EXPRESSION_STATEMENT,
+} ExpressionKind;
+
 
 // ┌───────────────────────┐
 // │ Function declarations │

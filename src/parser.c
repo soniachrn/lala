@@ -75,19 +75,21 @@ static void synchronize(Parser* parser);
 // —————————
 
 // Declaration
-static void parseDeclaration(Parser* parser);
-static void parseVariable(Parser* parser);
-static void parseFunction(Parser* parser);
+static StatementProperties parseDeclaration(Parser* parser);
+static StatementProperties parseVariable(Parser* parser);
+static StatementProperties parseFunction(Parser* parser);
 static ValueType* parseValueType(Parser* parser);
 
 // Statement
-static void parseStatement (Parser* parser);
-static void parsePrint     (Parser* parser);
-static void parseAssignment(Parser* parser);
-static void parseIf        (Parser* parser);
-static void parseWhile     (Parser* parser);
-static void parseDoWhile   (Parser* parser);
-static void parseBlock     (Parser* parser);
+static StatementProperties parseStatement (Parser* parser);
+static StatementProperties parsePrint     (Parser* parser);
+static StatementProperties parseIf        (Parser* parser);
+static StatementProperties parseWhile     (Parser* parser);
+static StatementProperties parseDoWhile   (Parser* parser);
+static StatementProperties parseContinue  (Parser* parser);
+static StatementProperties parseBreak     (Parser* parser);
+static StatementProperties parseReturn    (Parser* parser);
+static StatementProperties parseBlock     (Parser* parser);
 
 // Expression
 static ValueType* parseOr        (Parser* parser);
@@ -96,8 +98,8 @@ static ValueType* parseComparison(Parser* parser);
 static ValueType* parseTerm      (Parser* parser);
 static ValueType* parseFactor    (Parser* parser);
 static ValueType* parsePrefix    (Parser* parser);
-static ValueType* parsePostfix   (Parser* parser);
-static ValueType* parsePrimary   (Parser* parser);
+static ValueType* parsePostfix   (Parser* parser, ExpressionKind expression_kind);
+static ValueType* parsePrimary   (Parser* parser, ExpressionKind expression_kind);
 
 
 // —————————————————————
@@ -134,6 +136,15 @@ static void pushOpCodeOnStack(Stack* stack, OpCode op_code) {
         pushByteOnStack(stack, (uint8_t)op_code);
     }
 }
+
+OpCode getOpGetFromStackForValueType(
+    ValueType* value_type, 
+    VariableKind kind
+);
+OpCode getOpSetOnStackForValueType(
+    ValueType* value_type,
+    VariableKind kind
+);
 
 
 // ┌──────────────────────────┐
@@ -380,9 +391,13 @@ static void synchronize(Parser* parser) {
     while (true) {
         switch (peekNext(parser)) {
             case TOKEN_VAR:
+            case TOKEN_FUNCTION:
             case TOKEN_PRINT:
             case TOKEN_IF:
             case TOKEN_WHILE:
+            case TOKEN_CONTINUE:
+            case TOKEN_BREAK:
+            case TOKEN_RETURN:
             case TOKEN_DOT:
             case TOKEN_LBRACE:
             case TOKEN_END:
@@ -400,13 +415,15 @@ static void synchronize(Parser* parser) {
 //  Parsing
 // —————————
 
-static void parseDeclaration(Parser* parser) {
+static StatementProperties parseDeclaration(Parser* parser) {
     ASSERT_PARSER(parser);
 
+    StatementProperties statement_properties = { false };
+
     switch (peekNext(parser)) {
-        case TOKEN_VAR:      parseVariable(parser);  break;
-        case TOKEN_FUNCTION: parseFunction(parser);  break;
-        default:             parseStatement(parser); break;
+        case TOKEN_VAR:      statement_properties = parseVariable(parser);  break;
+        case TOKEN_FUNCTION: statement_properties = parseFunction(parser);  break;
+        default:             statement_properties = parseStatement(parser); break;
     }
 
     if (parser->panic_mode) {
@@ -414,9 +431,10 @@ static void parseDeclaration(Parser* parser) {
     }
 
     ASSERT_PARSER(parser);
+    return statement_properties;
 }
 
-static void parseVariable(Parser* parser) {
+static StatementProperties parseVariable(Parser* parser) {
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_VAR);
@@ -440,71 +458,207 @@ static void parseVariable(Parser* parser) {
             valueTypeName(variable_type),
             valueTypeName(initializer_value_type)
         );
-        return;
     }
 
     // Declare variable
-    if (!declareVariableInScope(
+    switch (declareVariableInScope(
         parser->scope,
         identifier_token.start,
         identifier_token.length,
         variable_type
     )) {
-        errorAt(
-            parser,
-            "Semantic",
-            identifier_token,
-            "Could not declare variable %.*s. "
-            "Either the name is already taken or max variable number in scope is reached.",
-            identifier_token.length,
-            identifier_token.start
-        );
+        case VARDECL_SUCCESS:
+            break;
+
+        case VARDECL_TOO_MANY_VARIABLES_IN_A_SCOPE:
+            errorAt(
+                parser,
+                "Semantic",
+                identifier_token,
+                "Could not declare variable %.*s. "
+                "Can't declare more than %d variables in a scope.",
+                identifier_token.length,
+                identifier_token.start,
+                MAX_VARIABLES_IN_SCOPE
+            );
+            break;
+
+        case VARDECL_VARIABLE_REDECLARATION:
+            errorAt(
+                parser,
+                "Semantic",
+                identifier_token,
+                "Variable %.*s redeclaration.",
+                identifier_token.length,
+                identifier_token.start
+            );
+            break;
+
+        default:
+            assert(false);
     }
 
     ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
 }
 
-static void parseFunction(Parser* parser) {
+static StatementProperties parseFunction(Parser* parser) {
     ASSERT_PARSER(parser);
 
-    // forceMatch(parser, TOKEN_FUNCTION);
-    // Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+    // Function name
+    Token function_token = forceMatch(parser, TOKEN_FUNCTION);
+    Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
 
-    // // Parameters
-    // forceMatch(parser, TOKEN_LPAREN);
-    // while (!match(parser, TOKEN_RPAREN)) {
+    // Function type
+    Scope* function_scope = createScopeInNewCallFrame(parser->scope);
+    ValueType* function_type = createFunctionValueType();
 
-    //     forceMatch(parser, TOKEN_VAR);
-    //     Token parameter_identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+    // Parameters
+    forceMatch(parser, TOKEN_LPAREN);
+    while (!match(parser, TOKEN_RPAREN)) {
 
-    //     forceMatch(parser, TOKEN_COLON);
-    //     ValueType* parameter_type = parseValueType(parser);
+        // Parameter name
+        forceMatch(parser, TOKEN_VAR);
+        Token parameter_identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
 
-    // }
-    // 
-    // // Return type
-    // forceMatch(parser, TOKEN_COLON);
-    // ValueType* return_type = parseValueType(parser);
+        // Parameter type
+        forceMatch(parser, TOKEN_COLON);
+        ValueType* parameter_type = parseValueType(parser);
 
-    // // Jump to after the function body; fill the address later
-    // pushOpCodeOnStack(parser->chunk, OP_JUMP);
-    // size_t after_body_address_position_in_chunk = stackSize(parser->chunk);
-    // pushAddressOnStack(parser->chunk, (size_t)0);
+        if (peekNext(parser) != TOKEN_RPAREN) {
+            forceMatch(parser, TOKEN_COMMA);
+        }
 
-    // // Body
-    // parseStatement(parser);
+        // Add parameter to function type and declare parameter in scope
+        addParameterToFunctionValueType(&function_type->as.function, parameter_type);
+        switch (declareVariableInScope(
+            function_scope,
+            parameter_identifier_token.start,
+            parameter_identifier_token.length,
+            parameter_type
+        )) {
+            case VARDECL_SUCCESS:
+                break;
 
-    // // Fill the jump-after-the-body address
-    // size_t after_body_address = stackSize(parser->chunk);
-    // setAddressOnStack(parser->chunk, after_body_address_position_in_chunk, after_body_address);
+            case VARDECL_TOO_MANY_VARIABLES_IN_A_SCOPE:
+                errorAt(
+                    parser,
+                    "Semantic",
+                    identifier_token,
+                    "Could not declare parameter %.*s. "
+                    "A function can't have more than %d parameters.",
+                    identifier_token.length,
+                    identifier_token.start,
+                    MAX_VARIABLES_IN_SCOPE
+                );
+                break;
+
+            case VARDECL_VARIABLE_REDECLARATION:
+                errorAt(
+                    parser,
+                    "Semantic",
+                    identifier_token,
+                    "Parameter %.*s redeclares another variable.",
+                    identifier_token.length,
+                    identifier_token.start
+                );
+                break;
+
+            default:
+                assert(false);
+        }
+    }
+    
+    // Return type
+    forceMatch(parser, TOKEN_COLON);
+    ValueType* return_type = parseValueType(parser);
+    function_type->as.function.return_type = return_type;
+    function_scope->return_type = return_type;
+
+    // Declare function; fill the function start address value later.
+    pushOpCodeOnStack(parser->chunk, OP_PUSH_ADDRESS);
+    size_t function_start_address_position_in_chunk = stackSize(parser->chunk);
+    pushAddressOnStack(parser->chunk, (size_t)0);
+    switch (declareVariableInScope(
+        parser->scope,
+        identifier_token.start,
+        identifier_token.length,
+        function_type
+    )) {
+        case VARDECL_SUCCESS:
+            break;
+
+        case VARDECL_TOO_MANY_VARIABLES_IN_A_SCOPE:
+            errorAt(
+                parser,
+                "Semantic",
+                identifier_token,
+                "Could not declare function %.*s. "
+                "Can't declare more than %d variables in a scope.",
+                identifier_token.length,
+                identifier_token.start,
+                MAX_VARIABLES_IN_SCOPE
+            );
+            break;
+
+        case VARDECL_VARIABLE_REDECLARATION:
+            errorAt(
+                parser,
+                "Semantic",
+                identifier_token,
+                "Function %.*s redeclares another variable.",
+                identifier_token.length,
+                identifier_token.start
+            );
+            break;
+
+        default:
+            assert(false);
+    }
+
+    // Jump to after the function body; fill the address later
+    pushOpCodeOnStack(parser->chunk, OP_JUMP);
+    size_t after_body_address_position_in_chunk = stackSize(parser->chunk);
+    pushAddressOnStack(parser->chunk, (size_t)0);
+
+    // Fill the function start address
+    size_t function_start_address = stackSize(parser->chunk);
+    setAddressOnStack(parser->chunk, function_start_address_position_in_chunk, function_start_address);
+
+    // Body
+    parser->scope = function_scope;
+    StatementProperties body_properties = parseStatement(parser);
+    parser->scope = deleteScope(parser->scope);
+
+    // Make sure the function is return-terminated.
+    if (!body_properties.ends_with_return) {
+        if (valueTypesEqual(return_type, &VALUE_TYPE_VOID)) {
+            pushOpCodeOnStack(parser->chunk, OP_RETURN_VOID);
+        } else {
+            errorAt(
+                parser,
+                "Semantic",
+                function_token,
+                "Non-void function doesn't always end with a return."
+            );
+        }
+    }
+
+    // Fill the jump-after-the-body address
+    size_t after_body_address = stackSize(parser->chunk);
+    setAddressOnStack(parser->chunk, after_body_address_position_in_chunk, after_body_address);
 
     ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
 }
 
 static ValueType* parseValueType(Parser* parser) {
     ASSERT_PARSER(parser);
 
     switch (advance(parser)) {
+        case TOKEN_VOID:     return &VALUE_TYPE_VOID;
         case TOKEN_BOOL:     return &VALUE_TYPE_BOOL;
         case TOKEN_INT:      return &VALUE_TYPE_INT;
         case TOKEN_FLOAT:    return &VALUE_TYPE_FLOAT;
@@ -527,30 +681,39 @@ static ValueType* parseValueType(Parser* parser) {
     }
 }
 
-static void parseStatement(Parser* parser) {
+static StatementProperties parseStatement(Parser* parser) {
     ASSERT_PARSER(parser);
 
     switch (peekNext(parser)) {
-        case TOKEN_PRINT:      parsePrint(parser);      break;
-        case TOKEN_IDENTIFIER: parseAssignment(parser); break;
-        case TOKEN_IF:         parseIf(parser);         break;
-        case TOKEN_WHILE:      parseWhile(parser);      break;
-        case TOKEN_DO:         parseDoWhile(parser);    break;
-        case TOKEN_LBRACE:     parseBlock(parser);      break;
-        default:
+        case TOKEN_IDENTIFIER: {
+            parsePostfix(parser, EXPRESSION_STATEMENT);
+            StatementProperties statement_properties = { false };
+            return statement_properties;
+        }
+
+        case TOKEN_PRINT:      return parsePrint(parser);
+        case TOKEN_IF:         return parseIf(parser);
+        case TOKEN_WHILE:      return parseWhile(parser);
+        case TOKEN_DO:         return parseDoWhile(parser);
+        case TOKEN_CONTINUE:   return parseContinue(parser);
+        case TOKEN_BREAK:      return parseBreak(parser);
+        case TOKEN_RETURN:     return parseReturn(parser);
+        case TOKEN_LBRACE:     return parseBlock(parser);
+
+        default: {
             errorAtNext(
                 parser,
                 "Syntactic",
                 "Unexpected token on statement start. Expected TOKEN_PRINT, TOKEN_IDENTIFIER, TOKEN_IF, TOKEN_WHILE, TOKEN_DO, got %s",
                 tokenTypeName(peekNext(parser))
             );
-            break;
+            StatementProperties statement_properties = { false };
+            return statement_properties;
+        }
     }
-
-    ASSERT_PARSER(parser);
 }
 
-static void parsePrint(Parser* parser) {
+static StatementProperties parsePrint(Parser* parser) {
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_PRINT);
@@ -574,61 +737,11 @@ static void parsePrint(Parser* parser) {
     }
 
     ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
 }
 
-static void parseAssignment(Parser* parser) {
-    ASSERT_PARSER(parser);
-
-    // Consume identifier and expression
-    Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
-    forceMatch(parser, TOKEN_EQUAL);
-    Token expression_start_token = next(parser);
-    ValueType* expression_value_type = parseExpression(parser);
-
-    // Find variable
-    Variable variable;
-    bool found_variable = accessVariableInScope(
-        parser->scope,
-        identifier_token.start,
-        identifier_token.length,
-        &variable
-    );
-
-    // Make sure the variable is found
-    if (!found_variable) {
-        errorAt(
-            parser,
-            "Semantic",
-            identifier_token,
-            "Assignment to undeclared variable %.*s.",
-            identifier_token.length,
-            identifier_token.start
-        );
-        return;
-    }
-
-    // Make sure variable and expression types match
-    if (!valueTypesEqual(variable.type, expression_value_type)) {
-        error(
-            parser,
-            "Semantic",
-            expression_start_token,
-            previous(parser),
-            "Variable type (%s) and expression type (%s) don't match in an assignment.",
-            valueTypeName(variable.type),
-            valueTypeName(expression_value_type)
-        );
-        return;
-    }
-
-    // Set variable value on the stack
-    pushOpCodeOnStack(parser->chunk, getOpSetOnStackForValueType(variable.type));
-    pushAddressOnStack(parser->chunk, variable.address_on_stack);
-
-    ASSERT_PARSER(parser);
-}
-
-static void parseIf(Parser* parser){
+static StatementProperties parseIf(Parser* parser){
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_IF);
@@ -647,25 +760,37 @@ static void parseIf(Parser* parser){
             "Condition expression in an if statement is %s, but has to be bool.",
             valueTypeName(condition_value_type)
         );
-        return;
+        StatementProperties statement_properties = { false };
+        return statement_properties;
     }
 
-    // Jump out of if if condition is false; fill jump address later
+    // Jump over the body if condition is false; fill jump address later
     pushOpCodeOnStack(parser->chunk, OP_JUMP_IF_FALSE);
     size_t after_if_address_position_in_chunk = stackSize(parser->chunk);
     pushAddressOnStack(parser->chunk, (size_t)0);
 
     // Parse if body
-    parseStatement(parser);
+    StatementProperties statement_properties = { false };
+    StatementProperties if_body_properties = parseStatement(parser);
 
-    // Fill jump out address
+    // Fill jump over the body address
     size_t after_if_address = stackSize(parser->chunk);
     setAddressOnStack(parser->chunk, after_if_address_position_in_chunk, after_if_address);
 
+    // Parse else body if present
+    if (match(parser, TOKEN_ELSE)) {
+        StatementProperties else_body_properties = parseStatement(parser);
+        statement_properties.ends_with_return = (
+            if_body_properties.ends_with_return && 
+            else_body_properties.ends_with_return
+        );
+    }
+
     ASSERT_PARSER(parser);
+    return statement_properties;
 }
 
-static void parseWhile(Parser* parser){
+static StatementProperties parseWhile(Parser* parser){
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_WHILE);
@@ -687,7 +812,8 @@ static void parseWhile(Parser* parser){
             "Condition expression in an if statement is %s, but has to be bool.",
             valueTypeName(condition_value_type)
         );
-        return;
+        StatementProperties statement_properties = { false };
+        return statement_properties;
     }
 
     // Jump out of while if condition is false; fill jump address later
@@ -707,9 +833,11 @@ static void parseWhile(Parser* parser){
     setAddressOnStack(parser->chunk, after_while_address_position_in_chunk, after_while_address);
 
     ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
 }
 
-static void parseDoWhile(Parser* parser){
+static StatementProperties parseDoWhile(Parser* parser){
     ASSERT_PARSER(parser);
 
     forceMatch(parser, TOKEN_DO);
@@ -718,7 +846,7 @@ static void parseDoWhile(Parser* parser){
     size_t iteration_start_address = stackSize(parser->chunk);
 
     // Parse body
-    parseStatement(parser);
+    StatementProperties statement_properties = parseStatement(parser);
 
     forceMatch(parser, TOKEN_WHILE);
 
@@ -736,7 +864,6 @@ static void parseDoWhile(Parser* parser){
             "Condition expression in an if statement is %s, but has to be bool.",
             valueTypeName(condition_value_type)
         );
-        return;
     }
 
     // Jump to the start of do-while statement after an iteration, if the condition is true
@@ -744,19 +871,101 @@ static void parseDoWhile(Parser* parser){
     pushAddressOnStack(parser->chunk, iteration_start_address);
 
     ASSERT_PARSER(parser);
+    return statement_properties;
 }
 
-static void parseBlock(Parser* parser) {
+static StatementProperties parseContinue(Parser* parser) {
     ASSERT_PARSER(parser);
 
-    forceMatch(parser, TOKEN_LBRACE);
-    parser->scope = createScope(parser->scope);
-    while (!match(parser, TOKEN_RBRACE) && peekNext(parser) != TOKEN_END) {
-        parseDeclaration(parser);
+    forceMatch(parser, TOKEN_CONTINUE);
+    errorAtPrevious(parser, "Syntax", "Continue isn't implemented yet.");
+
+    ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
+}
+
+static StatementProperties parseBreak(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    forceMatch(parser, TOKEN_BREAK);
+    errorAtPrevious(parser, "Syntax", "Break isn't implemented yet.");
+
+    ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
+}
+
+static StatementProperties parseReturn(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    forceMatch(parser, TOKEN_RETURN);
+
+    // Make sure the return statement is inside a function.
+    ValueType* expected_return_type = getReturnType(parser->scope);
+    if (!expected_return_type) {
+        errorAtPrevious(parser, "Semantic", "Return statement outside of a function.");
     }
 
-    assert(parser->scope->parent->stack_top);
-    size_t block_scope_locals_size = parser->scope->stack_top - parser->scope->parent->stack_top;
+    // Return value
+    if (expected_return_type != &VALUE_TYPE_VOID) {
+        Token expression_start_token = next(parser);
+        ValueType* return_expression_type = parseExpression(parser);
+        
+        // Make sure return value's type corresponds with the function return type.
+        if (!valueTypesEqual(expected_return_type, return_expression_type)) {
+            error(
+                parser,
+                "Semantic",
+                expression_start_token,
+                previous(parser),
+                "Return value is a %s, but the function is expected to return a %s.",
+                valueTypeName(return_expression_type),
+                valueTypeName(expected_return_type)
+            );
+        }
+    }
+
+    // OP_RETURN
+    pushOpCodeOnStack(parser->chunk, getOpReturnForValueType(expected_return_type));
+
+    ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { true };
+    return statement_properties;
+}
+
+static StatementProperties parseBlock(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    StatementProperties statement_properties = { false };
+
+    // Enter a new scope.
+    forceMatch(parser, TOKEN_LBRACE);
+    parser->scope = createScope(parser->scope);
+
+    // Parse block statements.
+    while (!match(parser, TOKEN_RBRACE) && peekNext(parser) != TOKEN_END) {
+        StatementProperties current_declaration_properties = parseDeclaration(parser);
+        // If the statement always ends with return.
+        if (current_declaration_properties.ends_with_return) {
+            statement_properties.ends_with_return = true;
+            // Make sure there're no more statements in the block.
+            if (peekNext(parser) != TOKEN_RBRACE) {
+                errorAtNext(
+                    parser,
+                    "Semantic",
+                    "Statement is unreachable."
+                );
+                break;
+            }
+        }
+    }
+
+    // Exit the block scope.
+    assert(parser->scope->parent);
+    size_t block_scope_locals_size = (
+        parser->scope->stack_top - parser->scope->parent->stack_top
+    );
     pushOpCodeOnStack(parser->chunk, OP_POP_BYTES);
     pushAddressOnStack(parser->chunk, block_scope_locals_size);
 
@@ -764,6 +973,7 @@ static void parseBlock(Parser* parser) {
     assert(parser->scope);
 
     ASSERT_PARSER(parser);
+    return statement_properties;
 }
 
 static ValueType* parseOr(Parser* parser) {
@@ -881,7 +1091,7 @@ static ValueType* parsePrefix(Parser* parser) {
         operator_token_type = previous(parser).type;
     }
     
-    ValueType* value_type = parsePostfix(parser);
+    ValueType* value_type = parsePostfix(parser, EXPRESSION);
 
     if (had_prefix_operator) {
         if (operator_token_type == TOKEN_MINUS) {
@@ -899,10 +1109,18 @@ static ValueType* parsePrefix(Parser* parser) {
     return value_type;
 }
 
-static ValueType* parsePostfix(Parser* parser) {
+static ValueType* parsePostfix(Parser* parser, ExpressionKind expression_kind) {
     ASSERT_PARSER(parser);
 
-    ValueType* value_type = parsePrimary(parser);
+    ValueType* value_type = parsePrimary(parser, expression_kind);
+
+    // If the primary was an assignment to a variable, return.
+    if (expression_kind == EXPRESSION_STATEMENT && value_type == NULL) {
+        ASSERT_PARSER(parser);
+        return NULL;
+    }
+
+    Token last_postfix_op_token = previous(parser);
 
     while (
         match(parser, TOKEN_DOT)      ||
@@ -910,6 +1128,7 @@ static ValueType* parsePostfix(Parser* parser) {
         match(parser, TOKEN_LBRACKET) ||
         match(parser, TOKEN_COLON)
     ) {
+        last_postfix_op_token = previous(parser);
         switch (previous(parser).type) {
             
             // Member access
@@ -925,33 +1144,114 @@ static ValueType* parsePostfix(Parser* parser) {
                 //       3. push member access op
 
             // Call
-            case TOKEN_LPAREN:
-                errorAtPrevious(
-                    parser,
-                    "Syntactic",
-                    "Functions not implemented yet."
-                )
-                return &VALUE_TYPE_INVALID;
-                // TODO: 1. check type is func
-                //       2. eat argument list
-                //       3. check signature
-                //       4. push call op
+            case TOKEN_LPAREN: {
+                // Make sure the value is a function.
+                if (value_type->basic_type != BASIC_VALUE_TYPE_FUNCTION) {
+                    errorAtPrevious(
+                        parser,
+                        "Semantic",
+                        "Trying to call a %s. Only functions may be called.",
+                        valueTypeName(value_type)
+                    )
+                    return &VALUE_TYPE_INVALID;
+                }
+
+                FunctionValueType function = value_type->as.function;
+
+                // Return address; will be filled later.
+                pushOpCodeOnStack(parser->chunk, OP_PUSH_ADDRESS);
+                size_t return_address_position_in_chunk = stackSize(parser->chunk);
+                pushAddressOnStack(parser->chunk, (size_t)0);
+
+                // Arguments.
+                for (uint8_t i = 0; i < function.arity; ++i) {
+                    // Make sure the arguments list isn't over.
+                    if (peekNext(parser) == TOKEN_RPAREN) {
+                        errorAtNext(
+                            parser,
+                            "Semantic",
+                            "Expected the next argument %s.",
+                            valueTypeName(function.parameter_types[i])
+                        );
+                    }
+
+                    // Argument
+                    Token argument_expression_start_token = next(parser);
+                    ValueType* argument_type = parseExpression(parser);
+
+                    // Make sure the argument type matches the parameter type.
+                    if (!valueTypesEqual(function.parameter_types[i], argument_type)) {
+                        error(
+                            parser,
+                            "Semantic",
+                            argument_expression_start_token,
+                            previous(parser),
+                            "Argument type %s doesn't match parameter type %s.",
+                            valueTypeName(argument_type),
+                            valueTypeName(function.parameter_types[i])
+                        );
+                    }
+
+                    // Make sure all but the last arguments are followed by a comma.
+                    // The last argument may optionally be followed by a comma.
+                    if (!match(parser, TOKEN_COMMA) && i < function.arity - 1) {
+                        errorAtNext(
+                            parser,
+                            "Syntactic",
+                            "Expected a comma and the next argument %s.",
+                            valueTypeName(function.parameter_types[i + 1])
+                        );
+                    }
+                }
+                forceMatch(parser, TOKEN_RPAREN);
+
+                // Call op.
+                pushOpCodeOnStack(parser->chunk, OP_CALL);
+                // On CALL invocation, the top of the stack should be as follows:
+                //   - function address –– sizeof(size_t)
+                //   - return address   –– sizeof(size_t)
+                //   - arguments        –– function.parameters_size
+                size_t offset_from_call_frame_start = 2 * sizeof(size_t) + function.parameters_size;
+                pushAddressOnStack(parser->chunk, offset_from_call_frame_start);
+
+                // Fill the return address.
+                size_t return_address = stackSize(parser->chunk);
+                setAddressOnStack(parser->chunk, return_address_position_in_chunk, return_address);
+
+                // Remove the return value in an expression statement if it's the last postfix op.
+                if (
+                    expression_kind == EXPRESSION_STATEMENT &&
+                    peekNext(parser) != TOKEN_DOT           &&
+                    peekNext(parser) != TOKEN_LPAREN        &&
+                    peekNext(parser) != TOKEN_LBRACKET      &&
+                    peekNext(parser) != TOKEN_COLON
+                ) {
+                    pushOpCodeOnStack(parser->chunk, getOpPopForValueType(function.return_type));
+                }
+
+                value_type = function.return_type;
+                break;
+            }
             
             // Subscript
             case TOKEN_LBRACKET: {
+                // Make sure the value is array.
                 if (value_type->basic_type != BASIC_VALUE_TYPE_ARRAY) {
                     errorAtPrevious(
                         parser,
                         "Semantic",
-                        "Trying to subscript a %s. Only arrays can be subscripted.",
+                        "Trying to subscript a %s. Only arrays may be subscripted.",
                         valueTypeName(value_type)
                     );
                     return &VALUE_TYPE_INVALID;
                 }
 
+                // Index expression
                 Token expression_start_token = next(parser);
                 ValueType* index_type = parseExpression(parser);
+                forceMatch(parser, TOKEN_RBRACKET);
 
+                // Make sure index is an int.
                 if (index_type->basic_type != BASIC_VALUE_TYPE_INT) {
                     error(
                         parser,
@@ -964,8 +1264,7 @@ static ValueType* parsePostfix(Parser* parser) {
                     return &VALUE_TYPE_INVALID;
                 }
 
-                forceMatch(parser, TOKEN_RBRACKET);
-
+                // Subscript op.
                 emitOpCodesForTokenAndValueTypesCombination(
                     parser,
                     1,
@@ -981,6 +1280,7 @@ static ValueType* parsePostfix(Parser* parser) {
             case TOKEN_COLON:
                 switch (advance(parser)) {
                     
+                    // Cast float to int
                     case TOKEN_INT: {
                         BasicValueType expected[4] = { BASIC_VALUE_TYPE_FLOAT };
                         validateOperandType(value_type->basic_type, expected);
@@ -989,6 +1289,7 @@ static ValueType* parsePostfix(Parser* parser) {
                         break;
                     }
                     
+                    // Cast int to float
                     case TOKEN_FLOAT: {
                         BasicValueType expected[4] = { BASIC_VALUE_TYPE_INT };
                         validateOperandType(value_type->basic_type, expected);
@@ -997,6 +1298,7 @@ static ValueType* parsePostfix(Parser* parser) {
                         break;
                     }
                     
+                    // Cast to string
                     case TOKEN_STRING: {
                         BasicValueType expected[4] = { BASIC_VALUE_TYPE_BOOL, BASIC_VALUE_TYPE_INT, BASIC_VALUE_TYPE_FLOAT };
                         validateOperandType(value_type->basic_type, expected);
@@ -1019,6 +1321,7 @@ static ValueType* parsePostfix(Parser* parser) {
                         break;
                     }
 
+                    // Invalid cast
                     default:
                         errorAtPrevious(
                             parser,
@@ -1035,15 +1338,60 @@ static ValueType* parsePostfix(Parser* parser) {
         }
     }
 
-    ASSERT_PARSER(parser);
-    assert(value_type);
-    return value_type;
+    // Make sure expression statement ended with either an assignment or a call.
+    if (expression_kind == EXPRESSION_STATEMENT) {
+        switch (last_postfix_op_token.type) {
+            case TOKEN_DOT:
+            case TOKEN_LPAREN:
+            case TOKEN_LBRACKET:
+                // Correct expression statement.
+                break;
+
+            case TOKEN_COLON:
+                errorAt(
+                    parser,
+                    "Syntax",
+                    last_postfix_op_token,
+                    "Expression statement can't end with a type cast. "
+                    "Expression statement may end with either an assignment or a call."
+                );
+                break;
+
+            default:
+                errorAt(
+                    parser,
+                    "Syntax",
+                    last_postfix_op_token,
+                    "Expected an expression statement. "
+                    "Expression statement may end with either an assignment or a call."
+                );
+                break;
+        }
+    }
+
+    switch (expression_kind) {
+        case EXPRESSION:
+            ASSERT_PARSER(parser);
+            assert(value_type);
+            return value_type;
+
+        case EXPRESSION_STATEMENT:
+            ASSERT_PARSER(parser);
+            return NULL;
+
+        default:
+            assert(false);
+    }
 }
 
-static ValueType* parsePrimary(Parser* parser) {
+static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
     ASSERT_PARSER(parser);
 
     ValueType* value_type;
+
+    if (expression_kind == EXPRESSION_STATEMENT) {
+        assert(peekNext(parser) == TOKEN_IDENTIFIER);
+    }
 
     switch (advance(parser)) {
 
@@ -1105,26 +1453,33 @@ static ValueType* parsePrimary(Parser* parser) {
                 return &VALUE_TYPE_INVALID;
             }
 
-            OpCode op_code;
-            switch (variable.type->basic_type) {
-                case BASIC_VALUE_TYPE_BOOL:   op_code = OP_GET_BYTE_FROM_STACK;    break;
-                case BASIC_VALUE_TYPE_INT:    op_code = OP_GET_INT_FROM_STACK;     break;
-                case BASIC_VALUE_TYPE_FLOAT:  op_code = OP_GET_FLOAT_FROM_STACK;   break;
+            OpCode op_code = getOpGetFromStackForValueType(variable.type, variable.kind);
 
-                case BASIC_VALUE_TYPE_STRING:
-                case BASIC_VALUE_TYPE_ARRAY:
-                case BASIC_VALUE_TYPE_MAP:
-                    op_code = OP_GET_ADDRESS_FROM_STACK;
-                    break;
+            if (expression_kind == EXPRESSION_STATEMENT && match(parser, TOKEN_EQUAL)) {
+                Token expression_start_token = next(parser);
+                ValueType* expression_value_type = parseExpression(parser);
 
-                default:
-                    assert(false);
+                if (!valueTypesEqual(variable.type, expression_value_type)) {
+                    error(
+                        parser,
+                        "Semantic",
+                        expression_start_token,
+                        previous(parser),
+                        "Variable type (%s) and expression type (%s) don't match in an assignment.",
+                        valueTypeName(variable.type),
+                        valueTypeName(expression_value_type)
+                    );
+                }
+
+                op_code = getOpSetOnStackForValueType(variable.type, variable.kind);
+                value_type = NULL;
+            } else {
+                value_type = variable.type;
             }
 
             pushOpCodeOnStack(parser->chunk, op_code);
             pushAddressOnStack(parser->chunk, variable.address_on_stack);
 
-            value_type = variable.type;
             break;
         }
         
@@ -1200,7 +1555,9 @@ static ValueType* parsePrimary(Parser* parser) {
     }
 
     ASSERT_PARSER(parser);
-    assert(value_type);
+    if (expression_kind == EXPRESSION) {
+        assert(value_type);
+    }
     return value_type;
 }
 
@@ -1392,6 +1749,54 @@ static void emitOpCodesForTokenAndValueTypesCombination(
 }
 
 #undef KEY
+
+OpCode getOpGetFromStackForValueType(
+    ValueType* value_type, 
+    VariableKind kind
+) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:
+            return kind == LOCAL_VARIABLE ? OP_GET_LOCAL_BYTE : OP_GET_GLOBAL_BYTE;
+        case BASIC_VALUE_TYPE_INT:
+            return kind == LOCAL_VARIABLE ? OP_GET_LOCAL_INT : OP_GET_GLOBAL_INT;
+        case BASIC_VALUE_TYPE_FLOAT:
+            return kind == LOCAL_VARIABLE ? OP_GET_LOCAL_FLOAT : OP_GET_GLOBAL_FLOAT;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+            return kind == LOCAL_VARIABLE ? OP_GET_LOCAL_ADDRESS : OP_GET_GLOBAL_ADDRESS;
+
+        case BASIC_VALUE_TYPE_VOID:
+        default:
+            assert(false);
+    }
+}
+
+OpCode getOpSetOnStackForValueType(
+    ValueType* value_type,
+    VariableKind kind
+) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:
+            return kind == LOCAL_VARIABLE ? OP_SET_LOCAL_BYTE : OP_SET_GLOBAL_BYTE;
+        case BASIC_VALUE_TYPE_INT:
+            return kind == LOCAL_VARIABLE ? OP_SET_LOCAL_INT : OP_SET_GLOBAL_INT;
+        case BASIC_VALUE_TYPE_FLOAT:
+            return kind == LOCAL_VARIABLE ? OP_SET_LOCAL_FLOAT : OP_SET_GLOBAL_FLOAT;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+            return kind == LOCAL_VARIABLE ? OP_SET_LOCAL_ADDRESS : OP_SET_GLOBAL_ADDRESS;
+
+        case BASIC_VALUE_TYPE_VOID:
+        default:
+            assert(false);
+    }
+}
 
 
 #undef VALIDATE_PARSER
