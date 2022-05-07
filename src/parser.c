@@ -78,6 +78,7 @@ static void synchronize(Parser* parser);
 static StatementProperties parseDeclaration(Parser* parser);
 static StatementProperties parseVariable(Parser* parser);
 static StatementProperties parseFunction(Parser* parser);
+static StatementProperties parseStructure(Parser* parser);
 static ValueType* parseValueType(Parser* parser);
 
 // Statement
@@ -392,14 +393,13 @@ static void synchronize(Parser* parser) {
         switch (peekNext(parser)) {
             case TOKEN_VAR:
             case TOKEN_FUNCTION:
+            case TOKEN_STRUCTURE:
             case TOKEN_PRINT:
             case TOKEN_IF:
             case TOKEN_WHILE:
             case TOKEN_CONTINUE:
             case TOKEN_BREAK:
             case TOKEN_RETURN:
-            case TOKEN_DOT:
-            case TOKEN_LBRACE:
             case TOKEN_END:
                 ASSERT_PARSER(parser);
                 return;
@@ -421,9 +421,10 @@ static StatementProperties parseDeclaration(Parser* parser) {
     StatementProperties statement_properties = { false };
 
     switch (peekNext(parser)) {
-        case TOKEN_VAR:      statement_properties = parseVariable(parser);  break;
-        case TOKEN_FUNCTION: statement_properties = parseFunction(parser);  break;
-        default:             statement_properties = parseStatement(parser); break;
+        case TOKEN_VAR:       statement_properties = parseVariable(parser);  break;
+        case TOKEN_FUNCTION:  statement_properties = parseFunction(parser);  break;
+        case TOKEN_STRUCTURE: statement_properties = parseStructure(parser); break;
+        default:              statement_properties = parseStatement(parser); break;
     }
 
     if (parser->panic_mode) {
@@ -654,6 +655,110 @@ static StatementProperties parseFunction(Parser* parser) {
     return statement_properties;
 }
 
+static StatementProperties parseStructure(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+    // Structure name
+    forceMatch(parser, TOKEN_STRUCTURE);
+    Token identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+    ValueType* structure_type = createStructureValueType(
+        identifier_token.start,
+        identifier_token.length
+    );
+
+    // Fields
+    uint8_t reference_fields = 0;
+    forceMatch(parser, TOKEN_LBRACE);
+    while (!match(parser, TOKEN_RBRACE)) {
+        
+        // Field name and type
+        Token field_identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+        forceMatch(parser, TOKEN_COLON);
+        ValueType* field_type = parseValueType(parser);
+
+        // If it's a reference type, save it's offset in a structure object.
+        if (isReferenceValueType(field_type)) {
+            pushOpCodeOnStack(parser->chunk, OP_PUSH_ADDRESS);
+            pushAddressOnStack(parser->chunk, structure_type->as.structure.size);
+            reference_fields += 1;
+        }
+
+        // Declare field in the structure.
+        if (!addFieldToStructureValueType(
+            structure_type,
+            field_identifier_token.start,
+            field_identifier_token.length,
+            field_type
+        )) {
+            errorAt(
+                parser,
+                "Semantic",
+                field_identifier_token,
+                "Field %.*s redeclaration in structure %.*s.",
+                field_identifier_token.length,
+                field_identifier_token.start,
+                identifier_token.length,
+                identifier_token.start
+            );
+            break;
+        }
+
+        // // Comma
+        // if (peekNext(parser) != TOKEN_RBRACE) {
+        //     forceMatch(parser, TOKEN_COMMA);
+        // }
+    }
+
+    // If it's a reference structure, push it onto the heap and onto the stack.
+    if (reference_fields > 0) {
+        pushOpCodeOnStack(parser->chunk, OP_DEFINE_ON_HEAP);
+        pushAddressOnStack(parser->chunk, reference_fields * sizeof(size_t));
+        pushByteOnStack(parser->chunk, REFERENCE_RULE_PLAIN);
+    }
+
+    // Declare structure in the symbol table.
+    switch (declareVariableInScope(
+        parser->scope,
+        identifier_token.start,
+        identifier_token.length,
+        structure_type
+    )) {
+        case VARDECL_SUCCESS:
+            break;
+
+        case VARDECL_TOO_MANY_VARIABLES_IN_A_SCOPE:
+            errorAt(
+                parser,
+                "Semantic",
+                identifier_token,
+                "Could not declare structure %.*s. "
+                "Can't declare more than %d variables in a scope.",
+                identifier_token.length,
+                identifier_token.start,
+                MAX_VARIABLES_IN_SCOPE
+            );
+            break;
+
+        case VARDECL_VARIABLE_REDECLARATION:
+            errorAt(
+                parser,
+                "Semantic",
+                identifier_token,
+                "Structure %.*s redeclares another variable.",
+                identifier_token.length,
+                identifier_token.start
+            );
+            break;
+
+        default:
+            assert(false);
+    }
+
+    ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
+}
+
 static ValueType* parseValueType(Parser* parser) {
     ASSERT_PARSER(parser);
 
@@ -670,6 +775,41 @@ static ValueType* parseValueType(Parser* parser) {
             return createArrayValueType(element_type);
         }
         
+        case TOKEN_IDENTIFIER: {
+            // Find the structure variable.
+            Variable variable;
+            bool found_variable = accessVariableInScope(
+                parser->scope,
+                previous(parser).start,
+                previous(parser).length,
+                &variable
+            );
+
+            // Make sure the variable is present.
+            if (!found_variable) {
+                errorAtPrevious(
+                    parser,
+                    "Semantic",
+                    "Type %.*s isn't declared.",
+                    previous(parser).length,
+                    previous(parser).start
+                );
+                return &VALUE_TYPE_INVALID;
+            }
+
+            // Make sure the variable is a structure.
+            if (!isStructureValueType(variable.type)) {
+                errorAtPrevious(
+                    parser,
+                    "Semantic",
+                    "Expected a structure in type specifier, got a %s.",
+                    valueTypeName(variable.type)
+                );
+            }
+
+            return variable.type->as.structure.instance_type;
+        }
+
         default:
             errorAtPrevious(
                 parser,
@@ -1132,16 +1272,75 @@ static ValueType* parsePostfix(Parser* parser, ExpressionKind expression_kind) {
         switch (previous(parser).type) {
             
             // Member access
-            case TOKEN_DOT:
-                errorAtPrevious(
-                    parser,
-                    "Syntactic",
-                    "Structures not implemented yet."
-                );
-                return &VALUE_TYPE_INVALID;
-                // TODO: 1. check type is obj
-                //       2. eat identifier
-                //       3. push member access op
+            case TOKEN_DOT: {
+                // Make sure the value is an object.
+                if (value_type->basic_type != BASIC_VALUE_TYPE_OBJECT) {
+                    errorAtPrevious(
+                        parser,
+                        "Semantic",
+                        "Trying to access a member of a %s. Only objects have members.",
+                        valueTypeName(value_type)
+                    )
+                    return &VALUE_TYPE_INVALID;
+                }
+
+                StructureValueType structure = value_type->as.object.structure_type->as.structure;
+
+                Token member_identifier_token = forceMatch(parser, TOKEN_IDENTIFIER);
+                
+                size_t field_index;
+                if (!getFromHashMap(
+                    &structure.fields_map,
+                    member_identifier_token.start,
+                    member_identifier_token.length,
+                    &field_index
+                )) {
+                    errorAtPrevious(
+                        parser,
+                        "Semantic",
+                        "Field %.*s doesn't exist.",
+                        member_identifier_token.length,
+                        member_identifier_token.start
+                    );
+                }
+                assert(field_index < structure.fields_map.count);
+                Field field = structure.fields_properties[field_index];
+
+                OpCode op_code = getOpGetFromHeapForValueType(field.type);
+
+                // If it's an expression statement and this postfix is the last postfix in the lhs,
+                // parse the assignment.
+                if (expression_kind == EXPRESSION_STATEMENT && match(parser, TOKEN_EQUAL)) {
+                    // The assignment rhs.
+                    Token expression_start_token = next(parser);
+                    ValueType* expression_value_type = parseExpression(parser);
+
+                    // Make sure the field and value types match.
+                    if (!valueTypesEqual(field.type, expression_value_type)) {
+                        error(
+                            parser,
+                            "Semantic",
+                            expression_start_token,
+                            previous(parser),
+                            "Field type (%s) and expression type (%s) don't match in an assignment.",
+                            valueTypeName(field.type),
+                            valueTypeName(expression_value_type)
+                        );
+                    }
+
+                    // Replace get opcode with set opcode.
+                    op_code = getOpSetOnHeapForValueType(field.type);
+                    value_type = NULL;
+                } else {
+                    value_type = field.type;
+                }
+
+                // Get or set the field.
+                pushOpCodeOnStack(parser->chunk, op_code);
+                pushAddressOnStack(parser->chunk, field.offset);
+
+                break;
+            }
 
             // Call
             case TOKEN_LPAREN: {
@@ -1151,8 +1350,7 @@ static ValueType* parsePostfix(Parser* parser, ExpressionKind expression_kind) {
                         parser,
                         "Semantic",
                         "Trying to call a %s. Only functions may be called.",
-                        valueTypeName(value_type)
-                    )
+                        valueTypeName(value_type))
                     return &VALUE_TYPE_INVALID;
                 }
 
@@ -1434,6 +1632,7 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
         }
         
         case TOKEN_IDENTIFIER: {
+            // Find the variable.
             Variable variable;
             bool found_variable = accessVariableInScope(
                 parser->scope,
@@ -1442,6 +1641,7 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
                 &variable
             );
 
+            // Make sure the variable is present.
             if (!found_variable) {
                 errorAtPrevious(
                     parser,
@@ -1453,32 +1653,112 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
                 return &VALUE_TYPE_INVALID;
             }
 
-            OpCode op_code = getOpGetFromStackForValueType(variable.type, variable.kind);
+            // Structure object instantiation.
+            if (isStructureValueType(variable.type)) {
+                StructureValueType structure = variable.type->as.structure;
+                size_t fields_count = structure.fields_map.count;
 
-            if (expression_kind == EXPRESSION_STATEMENT && match(parser, TOKEN_EQUAL)) {
-                Token expression_start_token = next(parser);
-                ValueType* expression_value_type = parseExpression(parser);
+                forceMatch(parser, TOKEN_LPAREN);
 
-                if (!valueTypesEqual(variable.type, expression_value_type)) {
-                    error(
-                        parser,
-                        "Semantic",
-                        expression_start_token,
-                        previous(parser),
-                        "Variable type (%s) and expression type (%s) don't match in an assignment.",
-                        valueTypeName(variable.type),
-                        valueTypeName(expression_value_type)
-                    );
+                // Arguments
+                for (size_t i = 0; i < fields_count; ++i) {
+                    // Make sure the arguments list isn't over.
+                    if (peekNext(parser) == TOKEN_RPAREN) {
+                        errorAtNext(
+                            parser,
+                            "Semantic",
+                            "Expected the next %s argument.",
+                            valueTypeName(structure.fields_properties[i].type)
+                        );
+                    }
+
+                    // Argument
+                    Token argument_expression_start_token = next(parser);
+                    ValueType* argument_type = parseExpression(parser);
+
+                    // Make sure the argument type matches the field type.
+                    if (!valueTypesEqual(structure.fields_properties[i].type, argument_type)) {
+                        error(
+                            parser,
+                            "Semantic",
+                            argument_expression_start_token,
+                            previous(parser),
+                            "Argument type %s doesn't match field type %s.",
+                            valueTypeName(argument_type),
+                            valueTypeName(structure.fields_properties[i].type)
+                        );
+                    }
+
+                    // Make sure all but the last arguments are followed by a comma.
+                    // The last argument may optionally be followed by a comma.
+                    if (!match(parser, TOKEN_COMMA) && i < fields_count - 1) {
+                        errorAtNext(
+                            parser,
+                            "Syntactic",
+                            "Expected a comma and the next argument %s.",
+                            valueTypeName(structure.fields_properties[i].type)
+                        );
+                    }
+                }
+                forceMatch(parser, TOKEN_RPAREN);
+
+                // If it's a reference structure, get the structure definition from the stack.
+                if (variable.type->basic_type == BASIC_VALUE_TYPE_REFERENCE_STRUCTURE) {
+                    pushOpCodeOnStack(parser->chunk, getOpGetFromStackForValueType(variable.type, variable.kind));
+                    pushAddressOnStack(parser->chunk, variable.address_on_stack);
                 }
 
-                op_code = getOpSetOnStackForValueType(variable.type, variable.kind);
-                value_type = NULL;
-            } else {
-                value_type = variable.type;
+                // Instantiate the structure.
+                pushOpCodeOnStack(parser->chunk, OP_DEFINE_ON_HEAP);
+                pushAddressOnStack(parser->chunk, structure.size);
+                pushByteOnStack(
+                    parser->chunk,
+                    (
+                        variable.type->basic_type == BASIC_VALUE_TYPE_PLAIN_STRUCTURE ?
+                        REFERENCE_RULE_PLAIN :
+                        REFERENCE_RULE_CUSTOM
+                    )
+                );
+
+                value_type = structure.instance_type;
             }
 
-            pushOpCodeOnStack(parser->chunk, op_code);
-            pushAddressOnStack(parser->chunk, variable.address_on_stack);
+            // Variable get/set.
+            else {
+                // Get variable from stack opcode.
+                OpCode op_code = getOpGetFromStackForValueType(variable.type, variable.kind);
+
+                // If it's an expression statement and the identifier is an assignment target,
+                // parse the assignment and replace the get opcode with set opcdode.
+                if (expression_kind == EXPRESSION_STATEMENT && match(parser, TOKEN_EQUAL)) {
+                    // The assignment rhs.
+                    Token expression_start_token = next(parser);
+                    ValueType* expression_value_type = parseExpression(parser);
+
+                    // Make sure the variable and value types match.
+                    if (!valueTypesEqual(variable.type, expression_value_type)) {
+                        error(
+                            parser,
+                            "Semantic",
+                            expression_start_token,
+                            previous(parser),
+                            "Variable type (%s) and expression type (%s) don't match in an assignment.",
+                            valueTypeName(variable.type),
+                            valueTypeName(expression_value_type)
+                        );
+                    }
+
+                    // Replace get opcode with set opcode.
+                    op_code = getOpSetOnStackForValueType(variable.type, variable.kind);
+                    value_type = NULL;
+                } else {
+                    value_type = variable.type;
+                }
+
+                // Get or set the variable.
+                pushOpCodeOnStack(parser->chunk, op_code);
+                pushAddressOnStack(parser->chunk, variable.address_on_stack);
+            }
 
             break;
         }
@@ -1766,9 +2046,12 @@ OpCode getOpGetFromStackForValueType(
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
         case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        case BASIC_VALUE_TYPE_OBJECT:
             return kind == LOCAL_VARIABLE ? OP_GET_LOCAL_ADDRESS : OP_GET_GLOBAL_ADDRESS;
 
         case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
         default:
             assert(false);
     }
@@ -1790,9 +2073,12 @@ OpCode getOpSetOnStackForValueType(
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
         case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_OBJECT:
             return kind == LOCAL_VARIABLE ? OP_SET_LOCAL_ADDRESS : OP_SET_GLOBAL_ADDRESS;
 
         case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
         default:
             assert(false);
     }

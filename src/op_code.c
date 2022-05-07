@@ -9,6 +9,7 @@ const char* opCodeName(OpCode op_code) {
         // Stack
         case OP_PUSH_TRUE:               return "push true";
         case OP_PUSH_FALSE:              return "push false";
+        case OP_PUSH_BYTE:               return "push byte";
         case OP_PUSH_INT:                return "push int";
         case OP_PUSH_FLOAT:              return "push float";
         case OP_PUSH_ADDRESS:            return "push address";
@@ -21,6 +22,16 @@ const char* opCodeName(OpCode op_code) {
         // Heap
         case OP_LOAD_CONSTANT:           return "load constant";
         case OP_DEFINE_ON_HEAP:          return "define on heap";
+        
+        case OP_GET_BYTE_FROM_HEAP:      return "get byte from heap";
+        case OP_GET_INT_FROM_HEAP:       return "get int from heap";
+        case OP_GET_FLOAT_FROM_HEAP:     return "get float from heap";
+        case OP_GET_ADDRESS_FROM_HEAP:   return "get address from heap";
+
+        case OP_SET_BYTE_ON_HEAP:        return "set byte on heap";
+        case OP_SET_INT_ON_HEAP:         return "set int on heap";
+        case OP_SET_FLOAT_ON_HEAP:       return "set float on heap";
+        case OP_SET_ADDRESS_ON_HEAP:     return "set address on heap";
 
         // Logical
         case OP_OR:                      return "or";

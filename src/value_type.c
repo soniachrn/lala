@@ -55,6 +55,77 @@ void addParameterToFunctionValueType(
     function->parameter_types[function->arity - 1] = parameter;
 }
 
+ValueType* createStructureValueType(const char* name, uint8_t name_length) {
+    assert(name);
+
+    ValueType* type = calloc(1, sizeof(ValueType));
+    type->basic_type = BASIC_VALUE_TYPE_PLAIN_STRUCTURE;
+
+    initHashMap(&type->as.structure.fields_map);
+    type->as.structure.fields_properties = NULL;
+    type->as.structure.size = 0;
+
+    type->name = malloc(name_length + 1);
+    memcpy(type->name, name, name_length);
+    type->name[name_length] = '\0';
+
+    type->as.structure.instance_type = createObjectValueType(type);
+
+    return type;
+}
+
+bool addFieldToStructureValueType(
+    ValueType* value_type,
+    const char* field_name,
+    uint8_t field_name_length,
+    ValueType* field_type
+) {
+    assert(value_type);
+    assert(
+        value_type->basic_type == BASIC_VALUE_TYPE_PLAIN_STRUCTURE || 
+        value_type->basic_type == BASIC_VALUE_TYPE_REFERENCE_STRUCTURE
+    );
+    assert(field_type);
+
+    StructureValueType* structure = &value_type->as.structure;
+    assert(structure->fields_map.count < 255);
+
+    size_t field_index = structure->fields_map.count;
+
+    if (!storeInHashMap(
+        &structure->fields_map,
+        field_name,
+        field_name_length,
+        field_index
+    )) {
+        return false;
+    }
+
+    structure->fields_properties = realloc(
+        structure->fields_properties,
+        (field_index + 1) * sizeof(Field)
+    );
+    structure->fields_properties[field_index].type   = field_type;
+    structure->fields_properties[field_index].offset = structure->size;
+
+    if (isReferenceValueType(field_type)) {
+        value_type->basic_type = BASIC_VALUE_TYPE_REFERENCE_STRUCTURE;
+    }
+
+    structure->size += valueTypeSize(field_type);
+    return true;
+}
+
+ValueType* createObjectValueType(const ValueType* structure_type) {
+    assert(structure_type);
+
+    ValueType* type = calloc(1, sizeof(ValueType));
+    type->basic_type = BASIC_VALUE_TYPE_OBJECT;
+    type->as.object.structure_type = structure_type;
+    type->name = structure_type->name;
+    return type;
+}
+
 void deleteValueType(ValueType* value_type) {
     assert(value_type);
 
@@ -65,6 +136,7 @@ void deleteValueType(ValueType* value_type) {
         case BASIC_VALUE_TYPE_INT:
         case BASIC_VALUE_TYPE_FLOAT:
         case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_OBJECT:
             assert(false);
 
         case BASIC_VALUE_TYPE_FUNCTION:
@@ -73,10 +145,18 @@ void deleteValueType(ValueType* value_type) {
             }
             break;
 
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+            freeHashMap(&value_type->as.structure.fields_map);
+            if (value_type->as.structure.fields_properties) {
+                free(value_type->as.structure.fields_properties);
+            }
+            free(value_type->as.structure.instance_type);
+            break;
+
         default:
             break;
     }
-
 
     if (value_type->name)
         free(value_type->name);
@@ -85,16 +165,22 @@ void deleteValueType(ValueType* value_type) {
 
 const char* basicValueTypeName(BasicValueType basic_value_type) {
     switch (basic_value_type) {
-        case BASIC_VALUE_TYPE_INVALID:  return "INVALID TYPE";
-        case BASIC_VALUE_TYPE_VOID:     return "void";
-        case BASIC_VALUE_TYPE_BOOL:     return "bool";
-        case BASIC_VALUE_TYPE_INT:      return "int";
-        case BASIC_VALUE_TYPE_FLOAT:    return "float";
-        case BASIC_VALUE_TYPE_STRING:   return "string";
-        case BASIC_VALUE_TYPE_ARRAY:    return "array";
-        case BASIC_VALUE_TYPE_MAP:      return "map";
-        case BASIC_VALUE_TYPE_FUNCTION: return "function";
-        default:                        return "INVALID TYPE";
+        case BASIC_VALUE_TYPE_INVALID:   return "INVALID TYPE";
+        case BASIC_VALUE_TYPE_VOID:      return "void";
+        case BASIC_VALUE_TYPE_BOOL:      return "bool";
+        case BASIC_VALUE_TYPE_INT:       return "int";
+        case BASIC_VALUE_TYPE_FLOAT:     return "float";
+        case BASIC_VALUE_TYPE_STRING:    return "string";
+        case BASIC_VALUE_TYPE_ARRAY:     return "array";
+        case BASIC_VALUE_TYPE_MAP:       return "map";
+        case BASIC_VALUE_TYPE_FUNCTION:  return "function";
+
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+            return "structure";
+
+        case BASIC_VALUE_TYPE_OBJECT:    return "object";
+        default:                         return "INVALID TYPE";
     }
 }
 
@@ -169,6 +255,12 @@ const char* valueTypeName(ValueType* value_type) {
             }
             return value_type->name;
 
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        case BASIC_VALUE_TYPE_OBJECT:
+            assert(value_type->name);
+            return value_type->name;
+
         default:
             return "INVALID TYPE";
     }
@@ -176,6 +268,9 @@ const char* valueTypeName(ValueType* value_type) {
 
 size_t valueTypeSize(ValueType* value_type) {
     switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+            return 0;
+
         case BASIC_VALUE_TYPE_BOOL:   return sizeof(uint8_t);
         case BASIC_VALUE_TYPE_INT:    return sizeof(uint32_t);
         case BASIC_VALUE_TYPE_FLOAT:  return sizeof(double);
@@ -184,6 +279,8 @@ size_t valueTypeSize(ValueType* value_type) {
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
         case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        case BASIC_VALUE_TYPE_OBJECT:
             return sizeof(size_t);
 
         case BASIC_VALUE_TYPE_VOID:
@@ -203,11 +300,24 @@ bool isReferenceValueType(ValueType* value_type) {
         case BASIC_VALUE_TYPE_STRING:
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_OBJECT:
             return true;
 
         case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
         default:
             assert(false);
+    }
+}
+
+bool isStructureValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -262,6 +372,11 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
             return equal;
         }
 
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        case BASIC_VALUE_TYPE_OBJECT:
+            return a == b;
+
         case BASIC_VALUE_TYPE_INVALID:
             assert(false);
         default:
@@ -279,9 +394,12 @@ OpCode getOpPopForValueType(ValueType* value_type) {
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
         case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        case BASIC_VALUE_TYPE_OBJECT:
             return OP_POP_ADDRESS;
 
         case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
             return OP_EMPTY;
 
         default:
@@ -300,8 +418,53 @@ OpCode getOpReturnForValueType(ValueType* value_type) {
         case BASIC_VALUE_TYPE_ARRAY:
         case BASIC_VALUE_TYPE_MAP:
         case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_OBJECT:
             return OP_RETURN_ADDRESS;
 
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        default:
+            assert(false);
+    }
+}
+
+OpCode getOpGetFromHeapForValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:  return OP_GET_BYTE_FROM_HEAP;
+        case BASIC_VALUE_TYPE_INT:   return OP_GET_INT_FROM_HEAP;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_GET_FLOAT_FROM_HEAP;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_OBJECT:
+            return OP_GET_ADDRESS_FROM_HEAP;
+
+        case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        default:
+            assert(false);
+    }
+}
+
+OpCode getOpSetOnHeapForValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:  return OP_SET_BYTE_ON_HEAP;
+        case BASIC_VALUE_TYPE_INT:   return OP_SET_INT_ON_HEAP;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_SET_FLOAT_ON_HEAP;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_OBJECT:
+            return OP_SET_ADDRESS_ON_HEAP;
+
+        case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
         default:
             assert(false);
     }

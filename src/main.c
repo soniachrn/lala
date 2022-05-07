@@ -368,20 +368,18 @@ static void disassemble(LalaArguments arguments) {
         printf("%2lx %-22s", ip - program, opCodeName((OpCode)*ip));
 
         switch (*ip++) {
-            case OP_POP_BYTE:
+            case OP_PUSH_BYTE:
             case OP_LOAD_CONSTANT:
                 printf(" %u", *(uint8_t*)ip);
                 ip += sizeof(uint8_t);
                 break;
 
             case OP_PUSH_INT:
-            case OP_POP_INT:
                 printf(" %d", *(int32_t*)ip);
                 ip += sizeof(int32_t);
                 break;
 
             case OP_PUSH_FLOAT:
-            case OP_POP_FLOAT:
                 printf(" %g", *(double*)ip);
                 ip += sizeof(double);
                 break;
@@ -394,8 +392,17 @@ static void disassemble(LalaArguments arguments) {
                 break;
 
             case OP_PUSH_ADDRESS:
-            case OP_POP_ADDRESS:
             case OP_POP_BYTES:
+
+            case OP_GET_BYTE_FROM_HEAP:
+            case OP_GET_INT_FROM_HEAP:
+            case OP_GET_FLOAT_FROM_HEAP:
+            case OP_GET_ADDRESS_FROM_HEAP:
+            case OP_SET_BYTE_ON_HEAP:
+            case OP_SET_INT_ON_HEAP:
+            case OP_SET_FLOAT_ON_HEAP:
+            case OP_SET_ADDRESS_ON_HEAP:
+
             case OP_GET_LOCAL_BYTE:
             case OP_GET_LOCAL_INT:
             case OP_GET_LOCAL_FLOAT:
@@ -405,6 +412,7 @@ static void disassemble(LalaArguments arguments) {
             case OP_SET_LOCAL_FLOAT:
             case OP_SET_LOCAL_ADDRESS:
             case OP_GET_GLOBAL_BYTE:
+
             case OP_GET_GLOBAL_INT:
             case OP_GET_GLOBAL_FLOAT:
             case OP_GET_GLOBAL_ADDRESS:
@@ -412,6 +420,7 @@ static void disassemble(LalaArguments arguments) {
             case OP_SET_GLOBAL_INT:
             case OP_SET_GLOBAL_FLOAT:
             case OP_SET_GLOBAL_ADDRESS:
+
             case OP_CALL:
             case OP_JUMP:
             case OP_JUMP_IF_TRUE:

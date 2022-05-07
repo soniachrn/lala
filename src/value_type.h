@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "hashmap.h"
 #include "op_code.h"
 
 
@@ -22,7 +23,15 @@ typedef enum {
     BASIC_VALUE_TYPE_ARRAY,
     BASIC_VALUE_TYPE_MAP,
     BASIC_VALUE_TYPE_FUNCTION,
-    // VALUE_USER_DEFINED,
+
+    // Plain structure doesn't have reference fields 
+    // and doesn't have a runtime representation.
+    BASIC_VALUE_TYPE_PLAIN_STRUCTURE,
+    // Reference structure has at least one reference field
+    // and has a runtime representation.
+    BASIC_VALUE_TYPE_REFERENCE_STRUCTURE,
+
+    BASIC_VALUE_TYPE_OBJECT,
 } BasicValueType;
 
 struct ValueType;
@@ -44,12 +53,30 @@ typedef struct {
     ValueType* return_type;
 } FunctionValueType;
 
+typedef struct {
+    ValueType* type;
+    size_t offset;
+} Field;
+
+typedef struct {
+    HashMap fields_map;
+    Field* fields_properties;
+    size_t size;
+    ValueType* instance_type;
+} StructureValueType;
+
+typedef struct {
+    const ValueType* structure_type;
+} ObjectValueType;
+
 struct ValueType {
     BasicValueType basic_type;
     union {
-        ArrayValueType    array;
-        MapValueType      map;
-        FunctionValueType function;
+        ArrayValueType     array;
+        MapValueType       map;
+        FunctionValueType  function;
+        StructureValueType structure;
+        ObjectValueType    object;
     } as;
     char* name;
 };
@@ -77,17 +104,29 @@ void addParameterToFunctionValueType(
     FunctionValueType* function,
     ValueType* parameter
 );
+ValueType* createStructureValueType(const char* name, uint8_t name_length);
+bool addFieldToStructureValueType(
+    ValueType* value_type,
+    const char* field_name,
+    uint8_t field_name_length,
+    ValueType* field_type
+);
+ValueType* createObjectValueType(const ValueType* structure_type);
 void deleteValueType(ValueType* value_type);
 
 const char* basicValueTypeName(BasicValueType basic_value_type);
 const char* valueTypeName(ValueType* value_type);
 
+// Value type size on stack.
 size_t valueTypeSize(ValueType* value_type);
 bool   isReferenceValueType(ValueType* value_type);
+bool   isStructureValueType(ValueType* value_type);
 bool   valueTypesEqual(ValueType* a, ValueType* b);
 
 OpCode getOpPopForValueType(ValueType* value_type);
 OpCode getOpReturnForValueType(ValueType* value_type);
+OpCode getOpGetFromHeapForValueType(ValueType* value_type);
+OpCode getOpSetOnHeapForValueType(ValueType* value_type);
 
 
 #endif

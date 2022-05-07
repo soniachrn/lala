@@ -131,6 +131,7 @@ void interpret(VM* vm) {
             // Stack
             case OP_PUSH_TRUE:    PUSH_BYTE(1); break;
             case OP_PUSH_FALSE:   PUSH_BYTE(0); break;
+            case OP_PUSH_BYTE:    PUSH_BYTE(readByteFromSource(vm)); break;
             case OP_PUSH_INT:     PUSH_INT(readIntFromSource(vm)); break;
             case OP_PUSH_FLOAT:   PUSH_FLOAT(readFloatFromSource(vm)); break;
             case OP_PUSH_ADDRESS: PUSH_ADDRESS(readAddressFromSource(vm)); break;
@@ -162,10 +163,14 @@ void interpret(VM* vm) {
             case OP_DEFINE_ON_HEAP: {
                 size_t length = readAddressFromSource(vm);
                 ReferenceRule reference_rule = (ReferenceRule)readByteFromSource(vm);
+                Object* custom_reference_rule = NULL;
+                if (reference_rule == REFERENCE_RULE_CUSTOM) {
+                    custom_reference_rule = (Object*)POP_ADDRESS();
+                }
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
                     reference_rule,
-                    NULL,
+                    custom_reference_rule,
                     length,
                     vm->stack.stack_top - length * sizeof(uint8_t)
                 );
@@ -173,6 +178,37 @@ void interpret(VM* vm) {
                 PUSH_ADDRESS((size_t)object);
                 break;
             }
+
+#define GET_FROM_HEAP_OP(type, push)                   \
+    {                                                  \
+        Object* object = (Object*)POP_ADDRESS();       \
+        size_t offset = readAddressFromSource(vm);     \
+        assert(offset + sizeof(type) <= object->size); \
+        push(*(type*)(object->value + offset));        \
+    }
+
+            case OP_GET_BYTE_FROM_HEAP:    GET_FROM_HEAP_OP(uint8_t, PUSH_BYTE);    break;
+            case OP_GET_INT_FROM_HEAP:     GET_FROM_HEAP_OP(int32_t, PUSH_INT);     break;
+            case OP_GET_FLOAT_FROM_HEAP:   GET_FROM_HEAP_OP(double,  PUSH_FLOAT);   break;
+            case OP_GET_ADDRESS_FROM_HEAP: GET_FROM_HEAP_OP(size_t,  PUSH_ADDRESS); break;
+
+#undef GET_FROM_HEAP_OP
+
+#define SET_ON_HEAP_OP(type, pop)                      \
+    {                                                  \
+        type value = pop();                            \
+        Object* object = (Object*)POP_ADDRESS();       \
+        size_t offset = readAddressFromSource(vm);     \
+        assert(offset + sizeof(type) <= object->size); \
+        *(type*)(object->value + offset) = value;      \
+    }
+
+            case OP_SET_BYTE_ON_HEAP:    SET_ON_HEAP_OP(uint8_t, POP_BYTE);    break;
+            case OP_SET_INT_ON_HEAP:     SET_ON_HEAP_OP(int32_t, POP_INT);     break;
+            case OP_SET_FLOAT_ON_HEAP:   SET_ON_HEAP_OP(double,  POP_FLOAT);   break;
+            case OP_SET_ADDRESS_ON_HEAP: SET_ON_HEAP_OP(size_t,  POP_ADDRESS); break;
+
+#undef SET_ON_HEAP_OP
 
             // Logical
             case OP_OR:  PUSH_BYTE(POP_BYTE() || POP_BYTE()); break;
@@ -250,34 +286,26 @@ void interpret(VM* vm) {
             case OP_CAST_BOOL_TO_STRING:
                 PUSH_ADDRESS((size_t)(POP_BYTE() ? &OBJECT_STRING_TRUE : &OBJECT_STRING_FALSE));
                 break;
-            case OP_CAST_INT_TO_STRING: {
-                char buffer[128];
-                int length = snprintf(buffer, 128, "%d", POP_INT());
 
-                Object* object = allocateObjectFromValue(
-                    &vm->heap,
-                    REFERENCE_RULE_PLAIN,
-                    NULL,
-                    (size_t)length,
-                    (uint8_t*)buffer
-                );
-                PUSH_ADDRESS((size_t)object);
-                break;
-            }
-            case OP_CAST_FLOAT_TO_STRING: {
-                char buffer[128];
-                int length = snprintf(buffer, 128, "%g", POP_FLOAT());
+#define CAST_NUMBER_TO_STRING_OP(format, value)            \
+    {                                                      \
+        char buffer[128];                                  \
+        int length = snprintf(buffer, 128, format, value); \
+                                                           \
+        Object* object = allocateObjectFromValue(          \
+            &vm->heap,                                     \
+            REFERENCE_RULE_PLAIN,                          \
+            NULL,                                          \
+            (size_t)length,                                \
+            (uint8_t*)buffer                               \
+        );                                                 \
+        PUSH_ADDRESS((size_t)object);                      \
+    }
 
-                Object* object = allocateObjectFromValue(
-                    &vm->heap,
-                    REFERENCE_RULE_PLAIN,
-                    NULL,
-                    (size_t)length,
-                    (uint8_t*)buffer
-                );
-                PUSH_ADDRESS((size_t)object);
-                break;
-            }
+            case OP_CAST_INT_TO_STRING:   CAST_NUMBER_TO_STRING_OP("%d", POP_INT());   break;
+            case OP_CAST_FLOAT_TO_STRING: CAST_NUMBER_TO_STRING_OP("%g", POP_FLOAT()); break;
+
+#undef CAST_NUMBER_TO_STRING_OP
 
 #define GET_FROM_STACK_OP(type_name, local)                  \
     push ## type_name ## OnStack(                            \
@@ -389,122 +417,49 @@ void interpret(VM* vm) {
                 break;                          
             }
 
-            case OP_RETURN_BYTE: {
-                uint8_t return_value = POP_BYTE();
-                size_t return_address = getAddressFromStack(
-                    &vm->stack,
-                    vm->call_frame->stack_offset + RETURN_ADDRESS_POSITION_IN_CALL_FRAME
-                );
+#define RETURN_OP(type, pop, push)                                                \
+    {                                                                             \
+        type return_value = pop();                                                \
+        size_t return_address = getAddressFromStack(                              \
+            &vm->stack,                                                           \
+            vm->call_frame->stack_offset + RETURN_ADDRESS_POSITION_IN_CALL_FRAME  \
+        );                                                                        \
+                                                                                  \
+        popCallFrame(vm);                                                         \
+                                                                                  \
+        push(return_value);                                                       \
+        vm->ip = vm->source + return_address;                                     \
+    }
 
-                popCallFrame(vm);
+            case OP_RETURN_BYTE:    RETURN_OP(uint8_t, POP_BYTE,    PUSH_BYTE);    break;
+            case OP_RETURN_INT:     RETURN_OP(int32_t, POP_INT,     PUSH_INT);     break;
+            case OP_RETURN_FLOAT:   RETURN_OP(double,  POP_FLOAT,   PUSH_FLOAT);   break;
+            case OP_RETURN_ADDRESS: RETURN_OP(size_t,  POP_ADDRESS, PUSH_ADDRESS); break;
 
-                PUSH_BYTE(return_value);
-                vm->ip = vm->source + return_address;
-                break;
-            }
+#undef RETURN_OP
 
-            case OP_RETURN_INT: {
-                int32_t return_value = POP_INT();
-                size_t return_address = getAddressFromStack(
-                    &vm->stack,
-                    vm->call_frame->stack_offset + RETURN_ADDRESS_POSITION_IN_CALL_FRAME
-                );
-
-                popCallFrame(vm);
-
-                PUSH_INT(return_value);
-                vm->ip = vm->source + return_address;
-                break;
-            }
-
-            case OP_RETURN_FLOAT: {
-                double return_value = POP_FLOAT();
-                size_t return_address = getAddressFromStack(
-                    &vm->stack,
-                    vm->call_frame->stack_offset + RETURN_ADDRESS_POSITION_IN_CALL_FRAME
-                );
-
-                popCallFrame(vm);
-
-                PUSH_FLOAT(return_value);
-                vm->ip = vm->source + return_address;
-                break;
-            }
-
-            case OP_RETURN_ADDRESS: {
-                size_t return_value = POP_ADDRESS();
-                size_t return_address = getAddressFromStack(
-                    &vm->stack,
-                    vm->call_frame->stack_offset + RETURN_ADDRESS_POSITION_IN_CALL_FRAME
-                );
-
-                popCallFrame(vm);
-
-                PUSH_ADDRESS(return_value);
-                vm->ip = vm->source + return_address;
-                break;
-            }
+#define SUBSCRIPT_OP(type, push)                                 \
+    {                                                            \
+        int32_t index = POP_INT();                               \
+        if (index < 0) {                                         \
+            fprintf(stderr, "negative array index\n");           \
+            exit(1);                                             \
+        }                                                        \
+        Object* array_object = (Object*)POP_ADDRESS();           \
+        if ((size_t)index + sizeof(type) > array_object->size) { \
+            fprintf(stderr, "array out of bounds\n");            \
+            exit(1);                                             \
+        }                                                        \
+        push(((type*)array_object->value)[index]);               \
+    }
 
             // Array
-            case OP_SUBSCRIPT_BYTE: {
-                int32_t index = POP_INT();
-                if (index < 0) {
-                    fprintf(stderr, "negative array index\n");
-                    exit(1);
-                }
-                Object* array_object = (Object*)POP_ADDRESS();
-                if ((size_t)index + sizeof(uint8_t) > array_object->size) {
-                    fprintf(stderr, "array out of bounds\n");
-                    exit(1);
-                }
-                PUSH_BYTE(((uint8_t*)array_object->value)[index]);
-                break;
-            }
+            case OP_SUBSCRIPT_BYTE:    SUBSCRIPT_OP(uint8_t, PUSH_BYTE);    break;
+            case OP_SUBSCRIPT_INT:     SUBSCRIPT_OP(int32_t, PUSH_INT);     break;
+            case OP_SUBSCRIPT_FLOAT:   SUBSCRIPT_OP(double,  PUSH_FLOAT);   break;
+            case OP_SUBSCRIPT_ADDRESS: SUBSCRIPT_OP(size_t,  PUSH_ADDRESS); break;
 
-            case OP_SUBSCRIPT_INT: {
-                int32_t index = POP_INT();
-                if (index < 0) {
-                    fprintf(stderr, "negative array index\n");
-                    exit(1);
-                }
-                Object* array_object = (Object*)POP_ADDRESS();
-                if ((size_t)index + sizeof(int32_t) > array_object->size) {
-                    fprintf(stderr, "array out of bounds\n");
-                    exit(1);
-                }
-                PUSH_INT(((int32_t*)array_object->value)[index]);
-                break;
-            }
-
-            case OP_SUBSCRIPT_FLOAT: {
-                int32_t index = POP_INT();
-                if (index < 0) {
-                    fprintf(stderr, "negative array index\n");
-                    exit(1);
-                }
-                Object* array_object = (Object*)POP_ADDRESS();
-                if ((size_t)index + sizeof(double) > array_object->size) {
-                    fprintf(stderr, "array out of bounds\n");
-                    exit(1);
-                }
-                PUSH_FLOAT(((double*)array_object->value)[index]);
-                break;
-            }
-
-            case OP_SUBSCRIPT_ADDRESS: {
-                int32_t index = POP_INT();
-                if (index < 0) {
-                    fprintf(stderr, "negative array index\n");
-                    exit(1);
-                }
-                Object* array_object = (Object*)POP_ADDRESS();
-                if ((size_t)index + sizeof(size_t) > array_object->size) {
-                    fprintf(stderr, "array out of bounds\n");
-                    exit(1);
-                }
-                PUSH_ADDRESS(((size_t*)array_object->value)[index]);
-                break;
-            }
+#undef SUBSCRIPT_OP
 
             default: assert(false); // TODO: error
         }

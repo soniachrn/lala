@@ -68,6 +68,13 @@ VariableDeclarationResult declareVariableInScope(
     ValueType* type
 );
 
+VariableDeclarationResult declarePlainStructureInScope(
+    Scope* scope,
+    const char* name,
+    size_t name_length,
+    ValueType* type
+);
+
 bool accessVariableInScope(
     const Scope* scope,
     const char* name,

@@ -133,8 +133,13 @@ VariableDeclarationResult declareVariableInScope(
         return VARDECL_TOO_MANY_VARIABLES_IN_A_SCOPE;
     }
 
-    Variable variable;
-    if (accessVariableInScope(scope, name, name_length, &variable)) {
+    size_t variable_index;
+    if (getFromHashMap(
+        &scope->symbol_table,
+        name,
+        name_length,
+        &variable_index
+    )) {
         return VARDECL_VARIABLE_REDECLARATION;
     }
 

@@ -13,6 +13,7 @@ typedef enum {
     // Stack
     OP_PUSH_TRUE,
     OP_PUSH_FALSE,
+    OP_PUSH_BYTE,
     OP_PUSH_INT,
     OP_PUSH_FLOAT,
     OP_PUSH_ADDRESS,
@@ -25,6 +26,16 @@ typedef enum {
     // Heap
     OP_LOAD_CONSTANT,
     OP_DEFINE_ON_HEAP,
+    
+    OP_GET_BYTE_FROM_HEAP,
+    OP_GET_INT_FROM_HEAP,
+    OP_GET_FLOAT_FROM_HEAP,
+    OP_GET_ADDRESS_FROM_HEAP,
+
+    OP_SET_BYTE_ON_HEAP,
+    OP_SET_INT_ON_HEAP,
+    OP_SET_FLOAT_ON_HEAP,
+    OP_SET_ADDRESS_ON_HEAP,
 
     // Logical
     OP_OR,

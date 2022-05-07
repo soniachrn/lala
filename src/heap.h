@@ -13,6 +13,7 @@
 typedef enum {
     REFERENCE_RULE_PLAIN,
     REFERENCE_RULE_REF_ARRAY,
+    REFERENCE_RULE_CUSTOM,
 } ReferenceRule;
 
 struct Object;
