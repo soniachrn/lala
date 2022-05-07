@@ -397,10 +397,12 @@ void interpret(VM* vm) {
                 assert(offset_from_call_frame_start <= vm->call_frame->stack_offset);
                 vm->call_frame->stack_offset -= offset_from_call_frame_start;
 
-                size_t function_address = getAddressFromStack(
+                Object* function_object = (Object*)getAddressFromStack(
                     &vm->stack,
                     vm->call_frame->stack_offset + FUNCTION_ADDRESS_POSITION_IN_CALL_FRAME
                 );
+                assert(function_object->size == sizeof(size_t));
+                size_t function_address = *(size_t*)function_object->value;
                 vm->ip = vm->source + function_address;
                 break;
             }

@@ -579,8 +579,14 @@ static StatementProperties parseFunction(Parser* parser) {
 
     // Declare function; fill the function start address value later.
     pushOpCodeOnStack(parser->chunk, OP_PUSH_ADDRESS);
+
     size_t function_start_address_position_in_chunk = stackSize(parser->chunk);
     pushAddressOnStack(parser->chunk, (size_t)0);
+
+    pushOpCodeOnStack(parser->chunk, OP_DEFINE_ON_HEAP);
+    pushAddressOnStack(parser->chunk, sizeof(size_t));
+    pushByteOnStack(parser->chunk, REFERENCE_RULE_PLAIN);
+
     switch (declareVariableInScope(
         parser->scope,
         identifier_token.start,
