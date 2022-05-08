@@ -28,6 +28,7 @@ add_compile_options(
 
 add_subdirectory(lib/cut)
 add_subdirectory(lib/hashmap)
+add_subdirectory(lib/path)
 
 project(Lala)
 
@@ -45,11 +46,13 @@ add_library(LalaLib
 )
 target_link_libraries(LalaLib PUBLIC
     HashMap
+    Path
 )
 target_include_directories(LalaLib PUBLIC
     "lib/ccf"
     "lib/debug"
     "lib/hashmap"
+    "lib/path"
     "src"
 )
 

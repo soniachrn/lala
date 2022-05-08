@@ -39,9 +39,12 @@ version: 0.0.2
 
 # Parser
 
-program         : top-statement* ;
+program         : global-statement* ;
 
-top-statement   : declaration ;
+global-statement: include
+                | declaration
+                ;
+include         : IMPORT ID (DOT ID)* ;
 
 # Declaration
 declaration     : variable

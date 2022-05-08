@@ -4,6 +4,8 @@
 
 #include <assert.h>
 
+#include "path.h"
+
 
 typedef enum {
     LALA_HELP,
@@ -39,7 +41,7 @@ static void fillLalabyHeader(LalabyHeader* header, const Parser* parser);
 static void   serializeLalabyHeader(FILE* file, const LalabyHeader* header);
 static void deserializeLalabyHeader(const uint8_t* source, LalabyHeader* header);
 
-static char* readFile(const char* filename);
+// static char* readFile(const char* filename);
 
 static void help(LalaArguments arguments);
 static void compile(LalaArguments arguments);
@@ -176,34 +178,34 @@ static LalaArguments parseArguments(int argc, const char* argv[]) {
     return arguments;
 }
 
-static char* readFile(const char* filename) {
-    FILE* file = fopen(filename, "rb");
-    if (file == NULL) {
-        fprintf(stderr, "Couldn't open file '%s'.\n", filename);
-        exit(1);
-    }
-
-    fseek(file, 0L, SEEK_END);
-    size_t file_size = (size_t)ftell(file);
-    rewind(file);
-
-    char* buffer = (char*)malloc(file_size + 1);
-    if (buffer == NULL) {
-        fprintf(stderr, "Couldn't allocate memory for file '%s'.\n", filename);
-        exit(1);
-    }
-
-    size_t bytes_read = fread(buffer, sizeof(char), file_size, file);
-    if (bytes_read < file_size) {
-        fprintf(stderr, "Couldn't read file '%s'.\n", filename);
-        exit(1);
-    }
-
-    buffer[bytes_read] = '\0';
-
-    fclose(file);
-    return buffer;
-}
+// static char* readFile(const char* filename) {
+//     FILE* file = fopen(filename, "rb");
+//     if (file == NULL) {
+//         fprintf(stderr, "Couldn't open file '%s'.\n", filename);
+//         exit(1);
+//     }
+// 
+//     fseek(file, 0L, SEEK_END);
+//     size_t file_size = (size_t)ftell(file);
+//     rewind(file);
+// 
+//     char* buffer = (char*)malloc(file_size + 1);
+//     if (buffer == NULL) {
+//         fprintf(stderr, "Couldn't allocate memory for file '%s'.\n", filename);
+//         exit(1);
+//     }
+// 
+//     size_t bytes_read = fread(buffer, sizeof(char), file_size, file);
+//     if (bytes_read < file_size) {
+//         fprintf(stderr, "Couldn't read file '%s'.\n", filename);
+//         exit(1);
+//     }
+// 
+//     buffer[bytes_read] = '\0';
+// 
+//     fclose(file);
+//     return buffer;
+// }
 
 static void fillLalabyHeader(LalabyHeader* header, const Parser* parser) {
     assert(header);
@@ -266,7 +268,11 @@ static void help(LalaArguments arguments) {
 }
 
 static void compile(LalaArguments arguments) {
-    char* source = readFile(arguments.input_filename);
+    char* source = NULL;
+    if (readFileAndPrintErrors(arguments.input_filename, &source, stderr) != READ_FILE_SUCCESS) {
+        exit(1);
+    }
+    // char* source = readFile(arguments.input_filename);
     
     // Init lexer, bytecode stack, parser
     Lexer lexer;
@@ -279,24 +285,26 @@ static void compile(LalaArguments arguments) {
     // Parse
     parse(&parser);
 
-    // Fill lalaby header
-    LalabyHeader header;
-    fillLalabyHeader(&header, &parser);
+    if (!parser.had_error) {
+        // Fill lalaby header
+        LalabyHeader header;
+        fillLalabyHeader(&header, &parser);
 
-    // Open file
-    FILE* file = fopen(arguments.output_filename, "wb");
-    if (file == NULL) {
-        fprintf(stderr, "Couldn't open file '%s'.\n", arguments.output_filename);
-        exit(1);
+        // Open file
+        FILE* file = fopen(arguments.output_filename, "wb");
+        if (file == NULL) {
+            fprintf(stderr, "Couldn't open file '%s'.\n", arguments.output_filename);
+            exit(1);
+        }
+        
+        // Write lalaby header, constants, program
+        serializeLalabyHeader(file, &header);
+        serializeConstants(file, &parser.constants);
+        fwrite(bytecode.stack, 1, (size_t)(bytecode.stack_top - bytecode.stack), file);
+
+        // Close file
+        fclose(file);
     }
-    
-    // Write lalaby header, constants, program
-    serializeLalabyHeader(file, &header);
-    serializeConstants(file, &parser.constants);
-    fwrite(bytecode.stack, 1, (size_t)(bytecode.stack_top - bytecode.stack), file);
-
-    // Close file
-    fclose(file);
 
     // Free lexer, bytecode stack, parser
     freeParser(&parser);
@@ -307,7 +315,11 @@ static void compile(LalaArguments arguments) {
 }
 
 static void execute(LalaArguments arguments) {
-    uint8_t* source = (uint8_t*)readFile(arguments.input_filename);
+    uint8_t* source = NULL;
+    if (readFileAndPrintErrors(arguments.input_filename, (char**)&source, stderr) != READ_FILE_SUCCESS) {
+        exit(1);
+    }
+    // uint8_t* source = (uint8_t*)readFile(arguments.input_filename);
 
     LalabyHeader header;
     deserializeLalabyHeader(source, &header);
@@ -334,7 +346,11 @@ static void lalaInterpret(LalaArguments arguments) {
 }
 
 static void disassemble(LalaArguments arguments) {
-    uint8_t* source = (uint8_t*)readFile(arguments.input_filename);
+    uint8_t* source = NULL;
+    if (readFileAndPrintErrors(arguments.input_filename, (char**)&source, stderr) != READ_FILE_SUCCESS) {
+        exit(1);
+    }
+    // uint8_t* source = (uint8_t*)readFile(arguments.input_filename);
 
     LalabyHeader header;
     deserializeLalabyHeader(source, &header);

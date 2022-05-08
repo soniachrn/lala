@@ -515,6 +515,8 @@ static TokenType identifierTokenType(const Lexer* lexer) {
                 }
             } else if (length == 3) {
                 return tryMatchKeyword(lexer, "int", TOKEN_INT);
+            } else {
+                return tryMatchKeyword(lexer, "include", TOKEN_INCLUDE);
             }
             break;
     }

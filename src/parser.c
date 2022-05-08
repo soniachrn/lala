@@ -75,6 +75,8 @@ static void synchronize(Parser* parser);
 // —————————
 
 // Declaration
+static StatementProperties parseGlobalStatement(Parser* parser);
+static StatementProperties parseInclude(Parser* parser);
 static StatementProperties parseDeclaration(Parser* parser);
 static StatementProperties parseVariable(Parser* parser);
 static StatementProperties parseFunction(Parser* parser);
@@ -219,7 +221,7 @@ void parse(Parser* parser) {
         peekNext(parser) != TOKEN_END &&
         peekNext(parser) != TOKEN_ERROR
     ) {
-        parseDeclaration(parser);
+        parseGlobalStatement(parser);
     }
 
     ASSERT_PARSER(parser);
@@ -414,6 +416,56 @@ static void synchronize(Parser* parser) {
 // —————————
 //  Parsing
 // —————————
+
+static StatementProperties parseGlobalStatement(Parser* parser) {
+    ASSERT_PARSER(parser);
+    
+    switch (peekNext(parser)) {
+        case TOKEN_INCLUDE:
+            return parseInclude(parser);
+        default:
+            return parseDeclaration(parser);
+    }
+}
+
+static StatementProperties parseInclude(Parser* parser) {
+    ASSERT_PARSER(parser);
+
+#ifdef _WIN32
+    const char path_separator = '\\';
+#else
+    const char path_separator = '/';
+#endif
+
+    forceMatch(parser, TOKEN_INCLUDE);
+
+    Token identifier = forceMatch(parser, TOKEN_IDENTIFIER);
+    size_t path_length = identifier.length;
+    char* path = malloc(path_length);
+    memcpy(path, identifier.start, identifier.length);
+
+    while (match(parser, TOKEN_DOT)) {
+        identifier = forceMatch(parser, TOKEN_IDENTIFIER);
+
+        size_t new_path_length = path_length + 1 + identifier.length;
+        path = realloc(path, new_path_length);
+        path[path_length] = path_separator;
+        memcpy(path + path_length + 1, identifier.start, identifier.length);
+        path_length = new_path_length;
+    }
+    
+    path = realloc(path, path_length + 6);
+    path[path_length] = '.';
+    path[path_length] = 'l';
+    path[path_length] = 'a';
+    path[path_length] = 'l';
+    path[path_length] = 'a';
+    path[path_length] = '\0';
+    
+    ASSERT_PARSER(parser);
+    StatementProperties statement_properties = { false };
+    return statement_properties;
+}
 
 static StatementProperties parseDeclaration(Parser* parser) {
     ASSERT_PARSER(parser);
@@ -1710,7 +1762,10 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
 
                 // If it's a reference structure, get the structure definition from the stack.
                 if (variable.type->basic_type == BASIC_VALUE_TYPE_REFERENCE_STRUCTURE) {
-                    pushOpCodeOnStack(parser->chunk, getOpGetFromStackForValueType(variable.type, variable.kind));
+                    pushOpCodeOnStack(
+                        parser->chunk,
+                        getOpGetFromStackForValueType(variable.type, variable.kind)
+                    );
                     pushAddressOnStack(parser->chunk, variable.address_on_stack);
                 }
 

@@ -74,6 +74,10 @@ void initVM(
     vm->call_frame = NULL;
     pushCallFrame(vm);
 
+    initStack(&vm->stack_references_positions);
+    printf("stack = %p\n", (void*)&vm->stack);
+    printf("stack_references_positions = %p\n", (void*)&vm->stack_references_positions);
+
     ASSERT_VM(vm);
 }
 
@@ -89,6 +93,8 @@ void freeVM(VM* vm) {
     freeHeap(&vm->heap);
 
     assert(vm->call_frame == NULL);
+
+    freeStack(&vm->stack_references_positions);
 }
 
 void dumpVM(const VM* vm) {
@@ -106,7 +112,61 @@ void fdumpVM(FILE* out, const VM* vm, int padding) {
         fprintf(out, __VA_ARGS__);                 \
     }
 
-    (void)out; (void)vm; (void)padding;
+    if (!vm) {
+        fprintf(out, "VM *(NULL)\n");
+    } else {
+        fprintf(out, "VM *(%p) %s {\n",
+            (const void*)vm,
+            VALIDATE_VM(vm) ? "VALID" : "INVALID"
+        );
+
+        printf("  source_size = %ld\n", vm->source_size);
+        printf("  source = ");
+        if (vm->source) {
+            fprintf(out, "*(%p)\n", (void*)vm->source);
+        } else {
+            fprintf(out, "*(NULL)\n");
+        }
+        printf("  ip = ");
+        if (vm->ip) {
+            fprintf(out, "*(%p)\n", (void*)vm->ip);
+        } else {
+            fprintf(out, "*(NULL)\n");
+        }
+        printf("  constants = ");
+        if (vm->constants) {
+            fprintf(out, "*(%p)\n", (void*)vm->constants);
+        } else {
+            fprintf(out, "*(NULL)\n");
+        }
+        printf("  call_frame = ");
+        if (vm->call_frame) {
+            fprintf(out, "*(%p)\n", (void*)vm->call_frame);
+        } else {
+            fprintf(out, "*(NULL)\n");
+        }
+        printf("  stack = ");
+        fdumpStack(out, &vm->stack, padding + 1);
+        printf("  stack_referenes_positions = [\n");
+        for (
+            size_t i = 0;
+            i < stackSize(&vm->stack_references_positions) / sizeof(size_t);
+            ++i
+        ) {
+            printf(
+                "    [%ld] = %ld,\n", 
+                i,
+                getAddressFromStack(
+                    &vm->stack_references_positions,
+                    i * sizeof(size_t)
+                )
+            );
+        }
+        printf("  ]\n");
+        printf("  heap = ");
+        fdumpHeap(out, &vm->heap, padding + 1);
+        printf("}\n");
+    }
 
 #undef printf
 }
@@ -116,15 +176,58 @@ void interpret(VM* vm) {
 
     // TODO check that ip didn't encounter '\0' when doint vm->ip +=
 
-#define PUSH_BYTE(   value) pushByteOnStack(   &vm->stack, (value))
-#define PUSH_INT(    value) pushIntOnStack(    &vm->stack, (value))
-#define PUSH_FLOAT(  value) pushFloatOnStack(  &vm->stack, (value))
-#define PUSH_ADDRESS(value) pushAddressOnStack(&vm->stack, (value))
+#define PUSH_BYTE(         value) pushByteOnStack(   &vm->stack, (value))
+#define PUSH_INT(          value) pushIntOnStack(    &vm->stack, (value))
+#define PUSH_FLOAT(        value) pushFloatOnStack(  &vm->stack, (value))
+#define PUSH_PLAIN_ADDRESS(value) pushAddressOnStack(&vm->stack, (value))
+#define PUSH_REF_ADDRESS(value)              \
+    {                                        \
+        pushAddressOnStack(                  \
+            &vm->stack_references_positions, \
+            stackSize(&vm->stack)            \
+        );                                   \
+        PUSH_PLAIN_ADDRESS(value);           \
+    }
 
-#define POP_BYTE( )   popByteFromStack(   &vm->stack)
-#define POP_INT(  )   popIntFromStack(    &vm->stack)
-#define POP_FLOAT()   popFloatFromStack(  &vm->stack)
-#define POP_ADDRESS() popAddressFromStack(&vm->stack)
+#define CLEAN_STACK_REFERENCES()                                                     \
+    {                                                                                \
+        while (                                                                      \
+            stackSize(&vm->stack_references_positions) > 0 &&                        \
+            *(size_t*)(vm->stack_references_positions.stack_top - sizeof(size_t)) >= \
+            stackSize(&vm->stack)                                                    \
+        ) {                                                                          \
+            popAddressFromStack(&vm->stack_references_positions);                    \
+        }                                                                            \
+    }
+
+#define POP_BYTE()                                      \
+    ({                                                  \
+        uint8_t value = popByteFromStack(&vm->stack);   \
+        CLEAN_STACK_REFERENCES();                       \
+        value;                                          \
+    })
+
+#define POP_INT()                                       \
+    ({                                                  \
+        int32_t value = popIntFromStack(&vm->stack);    \
+        CLEAN_STACK_REFERENCES();                       \
+        value;                                          \
+    })
+
+#define POP_FLOAT()                                     \
+    ({                                                  \
+        double value = popFloatFromStack(&vm->stack);   \
+        CLEAN_STACK_REFERENCES();                       \
+        value;                                          \
+    })
+
+#define POP_ADDRESS()                                   \
+    ({                                                  \
+        size_t value = popAddressFromStack(&vm->stack); \
+        CLEAN_STACK_REFERENCES();                       \
+        value;                                          \
+    })
+
 
     while (!isAtEnd(vm)) {
         switch ((OpCode)readByteFromSource(vm)) {
@@ -134,7 +237,7 @@ void interpret(VM* vm) {
             case OP_PUSH_BYTE:    PUSH_BYTE(readByteFromSource(vm)); break;
             case OP_PUSH_INT:     PUSH_INT(readIntFromSource(vm)); break;
             case OP_PUSH_FLOAT:   PUSH_FLOAT(readFloatFromSource(vm)); break;
-            case OP_PUSH_ADDRESS: PUSH_ADDRESS(readAddressFromSource(vm)); break;
+            case OP_PUSH_ADDRESS: PUSH_PLAIN_ADDRESS(readAddressFromSource(vm)); break;
 
             case OP_POP_BYTE:     POP_BYTE(); break;
             case OP_POP_INT:      POP_INT(); break; 
@@ -142,6 +245,7 @@ void interpret(VM* vm) {
             case OP_POP_ADDRESS:  POP_ADDRESS(); break;
             case OP_POP_BYTES:
                 popBytesFromStack(&vm->stack, readAddressFromSource(vm));
+                CLEAN_STACK_REFERENCES();
                 break;
 
             // Heap  
@@ -151,12 +255,14 @@ void interpret(VM* vm) {
                 Constant constant = vm->constants->constants[constant_index];
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
+                    &vm->stack,
+                    &vm->stack_references_positions,
                     REFERENCE_RULE_PLAIN,
                     NULL,
                     constant.length,
                     constant.value
                 );
-                PUSH_ADDRESS((size_t)object);
+                PUSH_REF_ADDRESS((size_t)object);
                 break;
             }
 
@@ -169,13 +275,16 @@ void interpret(VM* vm) {
                 }
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
+                    &vm->stack,
+                    &vm->stack_references_positions,
                     reference_rule,
                     custom_reference_rule,
                     length,
                     vm->stack.stack_top - length * sizeof(uint8_t)
                 );
                 popBytesFromStack(&vm->stack, length);
-                PUSH_ADDRESS((size_t)object);
+                CLEAN_STACK_REFERENCES();
+                PUSH_REF_ADDRESS((size_t)object);
                 break;
             }
 
@@ -187,10 +296,10 @@ void interpret(VM* vm) {
         push(*(type*)(object->value + offset));        \
     }
 
-            case OP_GET_BYTE_FROM_HEAP:    GET_FROM_HEAP_OP(uint8_t, PUSH_BYTE);    break;
-            case OP_GET_INT_FROM_HEAP:     GET_FROM_HEAP_OP(int32_t, PUSH_INT);     break;
-            case OP_GET_FLOAT_FROM_HEAP:   GET_FROM_HEAP_OP(double,  PUSH_FLOAT);   break;
-            case OP_GET_ADDRESS_FROM_HEAP: GET_FROM_HEAP_OP(size_t,  PUSH_ADDRESS); break;
+            case OP_GET_BYTE_FROM_HEAP:    GET_FROM_HEAP_OP(uint8_t, PUSH_BYTE);        break;
+            case OP_GET_INT_FROM_HEAP:     GET_FROM_HEAP_OP(int32_t, PUSH_INT);         break;
+            case OP_GET_FLOAT_FROM_HEAP:   GET_FROM_HEAP_OP(double,  PUSH_FLOAT);       break;
+            case OP_GET_ADDRESS_FROM_HEAP: GET_FROM_HEAP_OP(size_t,  PUSH_REF_ADDRESS); break;
 
 #undef GET_FROM_HEAP_OP
 
@@ -269,6 +378,8 @@ void interpret(VM* vm) {
 
                 Object* object = allocateEmptyObject(
                     &vm->heap,
+                    &vm->stack,
+                    &vm->stack_references_positions,
                     REFERENCE_RULE_PLAIN,
                     NULL,
                     l_address->size + r_address->size
@@ -276,7 +387,7 @@ void interpret(VM* vm) {
                 memcpy(object->value, l_address->value, l_address->size);
                 memcpy(object->value + l_address->size, r_address->value, r_address->size);
 
-                PUSH_ADDRESS((size_t)object);
+                PUSH_REF_ADDRESS((size_t)object);
                 break;
             }
 
@@ -284,22 +395,24 @@ void interpret(VM* vm) {
             case OP_CAST_FLOAT_TO_INT: PUSH_INT((int32_t)POP_FLOAT()); break;
             case OP_CAST_INT_TO_FLOAT: PUSH_FLOAT((double)POP_INT()); break;
             case OP_CAST_BOOL_TO_STRING:
-                PUSH_ADDRESS((size_t)(POP_BYTE() ? &OBJECT_STRING_TRUE : &OBJECT_STRING_FALSE));
+                PUSH_REF_ADDRESS((size_t)(POP_BYTE() ? &OBJECT_STRING_TRUE : &OBJECT_STRING_FALSE));
                 break;
 
-#define CAST_NUMBER_TO_STRING_OP(format, value)            \
-    {                                                      \
-        char buffer[128];                                  \
-        int length = snprintf(buffer, 128, format, value); \
-                                                           \
-        Object* object = allocateObjectFromValue(          \
-            &vm->heap,                                     \
-            REFERENCE_RULE_PLAIN,                          \
-            NULL,                                          \
-            (size_t)length,                                \
-            (uint8_t*)buffer                               \
-        );                                                 \
-        PUSH_ADDRESS((size_t)object);                      \
+#define CAST_NUMBER_TO_STRING_OP(format, value)             \
+    {                                                       \
+        char buffer[128];                                   \
+        int length = snprintf(buffer, 128, format, value);  \
+                                                            \
+        Object* object = allocateObjectFromValue(           \
+            &vm->heap,                                      \
+            &vm->stack,                                     \
+            &vm->stack_references_positions,                \
+            REFERENCE_RULE_PLAIN,                           \
+            NULL,                                           \
+            (size_t)length,                                 \
+            (uint8_t*)buffer                                \
+        );                                                  \
+        PUSH_REF_ADDRESS((size_t)object);                   \
     }
 
             case OP_CAST_INT_TO_STRING:   CAST_NUMBER_TO_STRING_OP("%d", POP_INT());   break;
@@ -433,10 +546,10 @@ void interpret(VM* vm) {
         vm->ip = vm->source + return_address;                                     \
     }
 
-            case OP_RETURN_BYTE:    RETURN_OP(uint8_t, POP_BYTE,    PUSH_BYTE);    break;
-            case OP_RETURN_INT:     RETURN_OP(int32_t, POP_INT,     PUSH_INT);     break;
-            case OP_RETURN_FLOAT:   RETURN_OP(double,  POP_FLOAT,   PUSH_FLOAT);   break;
-            case OP_RETURN_ADDRESS: RETURN_OP(size_t,  POP_ADDRESS, PUSH_ADDRESS); break;
+            case OP_RETURN_BYTE:    RETURN_OP(uint8_t, POP_BYTE,    PUSH_BYTE);        break;
+            case OP_RETURN_INT:     RETURN_OP(int32_t, POP_INT,     PUSH_INT);         break;
+            case OP_RETURN_FLOAT:   RETURN_OP(double,  POP_FLOAT,   PUSH_FLOAT);       break;
+            case OP_RETURN_ADDRESS: RETURN_OP(size_t,  POP_ADDRESS, PUSH_REF_ADDRESS); break;
 
 #undef RETURN_OP
 
@@ -456,10 +569,10 @@ void interpret(VM* vm) {
     }
 
             // Array
-            case OP_SUBSCRIPT_BYTE:    SUBSCRIPT_OP(uint8_t, PUSH_BYTE);    break;
-            case OP_SUBSCRIPT_INT:     SUBSCRIPT_OP(int32_t, PUSH_INT);     break;
-            case OP_SUBSCRIPT_FLOAT:   SUBSCRIPT_OP(double,  PUSH_FLOAT);   break;
-            case OP_SUBSCRIPT_ADDRESS: SUBSCRIPT_OP(size_t,  PUSH_ADDRESS); break;
+            case OP_SUBSCRIPT_BYTE:    SUBSCRIPT_OP(uint8_t, PUSH_BYTE);        break;
+            case OP_SUBSCRIPT_INT:     SUBSCRIPT_OP(int32_t, PUSH_INT);         break;
+            case OP_SUBSCRIPT_FLOAT:   SUBSCRIPT_OP(double,  PUSH_FLOAT);       break;
+            case OP_SUBSCRIPT_ADDRESS: SUBSCRIPT_OP(size_t,  PUSH_REF_ADDRESS); break;
 
 #undef SUBSCRIPT_OP
 
@@ -472,7 +585,8 @@ void interpret(VM* vm) {
 #undef POP_INT
 #undef POP_BYTE
 
-#undef PUSH_ADDRESS
+#undef PUSH_REF_ADDRESS
+#undef PUSH_PLAIN_ADDRESS
 #undef PUSH_FLOAT
 #undef PUSH_INT
 #undef PUSH_BYTE
@@ -500,11 +614,14 @@ static void popCallFrame(VM* vm) {
     ASSERT_VM(vm);
     
     popBytesFromStack(&vm->stack, stackSize(&vm->stack) - vm->call_frame->stack_offset);
+    CLEAN_STACK_REFERENCES();
 
     CallFrame* old_call_frame = vm->call_frame;
     vm->call_frame = vm->call_frame->parent;
     free(old_call_frame);
 }
+
+#undef CLEAN_STACK_REFERENCES
 
 static bool hasEnoughInputBytes(VM* vm, size_t expected_bytes) {
     ASSERT_VM(vm);

@@ -137,6 +137,7 @@ size_t stackSize(const Stack* stack) {
 
 void popBytesFromStack(Stack* stack, size_t count) {
     ASSERT_STACK(stack);
+    assert(count <= stackSize(stack));
 
     stack->stack_top -= count * sizeof(uint8_t);
     shrinkIfNeeded(stack);
@@ -158,6 +159,7 @@ void popBytesFromStack(Stack* stack, size_t count) {
     type pop ## type_name ## FromStack(Stack* stack) {            \
         ASSERT_STACK(stack);                                      \
                                                                   \
+        assert(sizeof(type) <= stackSize(stack));                 \
         stack->stack_top -= sizeof(type);                         \
         type value = *((type*)stack->stack_top);                  \
         shrinkIfNeeded(stack);                                    \
@@ -191,6 +193,7 @@ void popBytesFromStack(Stack* stack, size_t count) {
                                                                   \
         if (address + sizeof(type) > stackSize(stack)) {          \
             /* TODO: error */                                     \
+            printf("%ld %ld\n", address + sizeof(type), stackSize(stack)); \
             dumpStack(stack); \
             assert(false);                                        \
         }                                                         \

@@ -38,6 +38,9 @@ typedef struct {
     Heap       heap;
 
     CallFrame* call_frame;
+
+    // Contains stack positions for all reference values on the stack.
+    Stack stack_references_positions;
 } VM;
 
 

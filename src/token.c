@@ -53,6 +53,7 @@ const char* tokenTypeName(TokenType type) {
         case TOKEN_FUNCTION:           return "FUNCTION";
         case TOKEN_IF:                 return "IF";
         case TOKEN_IN:                 return "IN";
+        case TOKEN_INCLUDE:            return "INCLUDE";
         case TOKEN_INT:                return "INT";
         case TOKEN_MUTABLE:            return "MUTABLE";
         case TOKEN_OR:                 return "OR";
