@@ -268,22 +268,40 @@ static void help(LalaArguments arguments) {
 }
 
 static void compile(LalaArguments arguments) {
-    char* source = NULL;
-    if (readFileAndPrintErrors(arguments.input_filename, &source, stderr) != READ_FILE_SUCCESS) {
-        exit(1);
-    }
+    // char* source = NULL;
+    // if (readFileAndPrintErrors(arguments.input_filename, &source, stderr) != READ_FILE_SUCCESS) {
+    //     exit(1);
+    // }
     // char* source = readFile(arguments.input_filename);
     
     // Init lexer, bytecode stack, parser
-    Lexer lexer;
+    // Lexer lexer;
     Stack bytecode;
     Parser parser;
-    initLexer(&lexer, source);
+    // initLexer(&lexer, source);
     initStack(&bytecode);
-    initParser(&parser, &lexer, &bytecode);
+    // initParser(&parser, &lexer, &bytecode);
+    initParser(&parser, &bytecode);
 
     // Parse
-    parse(&parser);
+    // parse(&parser);
+    ParseFileResult result = parseFile(&parser, arguments.input_filename);
+    switch (result.type) {
+        case PARSE_FILE_RECURSIVE_INCLUDE:
+            assert(false);
+        case PARSE_FILE_READ_FILE_ERROR:
+            fprintf(
+                stderr,
+                "%s %s\n",
+                getReadFileResultErrorMessage(result.read_file_result),
+                arguments.input_filename
+            );
+            exit(1);
+        case PARSE_FILE_SUCCESS:
+            break;
+        default:
+            assert(false);
+    }
 
     if (!parser.had_error) {
         // Fill lalaby header
@@ -309,9 +327,9 @@ static void compile(LalaArguments arguments) {
     // Free lexer, bytecode stack, parser
     freeParser(&parser);
     freeStack(&bytecode);
-    freeLexer(&lexer);
+    // freeLexer(&lexer);
 
-    free(source);
+    // free(source);
 }
 
 static void execute(LalaArguments arguments) {

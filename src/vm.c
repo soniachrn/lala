@@ -75,8 +75,6 @@ void initVM(
     pushCallFrame(vm);
 
     initStack(&vm->stack_references_positions);
-    printf("stack = %p\n", (void*)&vm->stack);
-    printf("stack_references_positions = %p\n", (void*)&vm->stack_references_positions);
 
     ASSERT_VM(vm);
 }
@@ -176,6 +174,18 @@ void interpret(VM* vm) {
 
     // TODO check that ip didn't encounter '\0' when doint vm->ip +=
 
+#define CLEAN_STACK_REFERENCES()                                                 \
+{                                                                                \
+    while (                                                                      \
+        stackSize(&vm->stack_references_positions) > 0 &&                        \
+        *(size_t*)(vm->stack_references_positions.stack_top - sizeof(size_t)) >= \
+        stackSize(&vm->stack)                                                    \
+    ) {                                                                          \
+        popAddressFromStack(&vm->stack_references_positions);                    \
+    }                                                                            \
+}
+
+
 #define PUSH_BYTE(         value) pushByteOnStack(   &vm->stack, (value))
 #define PUSH_INT(          value) pushIntOnStack(    &vm->stack, (value))
 #define PUSH_FLOAT(        value) pushFloatOnStack(  &vm->stack, (value))
@@ -189,16 +199,10 @@ void interpret(VM* vm) {
         PUSH_PLAIN_ADDRESS(value);           \
     }
 
-#define CLEAN_STACK_REFERENCES()                                                     \
-    {                                                                                \
-        while (                                                                      \
-            stackSize(&vm->stack_references_positions) > 0 &&                        \
-            *(size_t*)(vm->stack_references_positions.stack_top - sizeof(size_t)) >= \
-            stackSize(&vm->stack)                                                    \
-        ) {                                                                          \
-            popAddressFromStack(&vm->stack_references_positions);                    \
-        }                                                                            \
-    }
+// #define POP_BYTE()    popByteFromStack(   &vm->stack)
+// #define POP_INT()     popIntFromStack(    &vm->stack)
+// #define POP_FLOAT()   popFloatFromStack(  &vm->stack)
+// #define POP_ADDRESS() popAddressFromStack(&vm->stack)
 
 #define POP_BYTE()                                      \
     ({                                                  \
@@ -272,6 +276,8 @@ void interpret(VM* vm) {
                 Object* custom_reference_rule = NULL;
                 if (reference_rule == REFERENCE_RULE_CUSTOM) {
                     custom_reference_rule = (Object*)POP_ADDRESS();
+                    // Mark in order for custom reference rule to not be deleted by gc before object allocation.
+                    custom_reference_rule->marked = true;
                 }
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
@@ -375,6 +381,9 @@ void interpret(VM* vm) {
             case OP_CONCATENATE: {
                 Object* r_address = (Object*)POP_ADDRESS();
                 Object* l_address = (Object*)POP_ADDRESS();
+                // Mark operands in order for them to not be deleted by gc before concatenation result allocation.
+                r_address->marked = true;
+                l_address->marked = true;
 
                 Object* object = allocateEmptyObject(
                     &vm->heap,

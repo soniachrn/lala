@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 ReadFileResult readFile(const char* file_path, char** buffer) {
@@ -11,7 +12,7 @@ ReadFileResult readFile(const char* file_path, char** buffer) {
 
     FILE* file = fopen(file_path, "rb");
     if (file == NULL) {
-        fprintf(stderr, "Couldn't open file '%s'.\n", file_path);
+        // fprintf(stderr, "Couldn't open file '%s'.\n", file_path);
         return READ_FILE_COULD_NOT_OPEN_FILE;
     }
 
@@ -21,13 +22,14 @@ ReadFileResult readFile(const char* file_path, char** buffer) {
 
     *buffer = (char*)malloc(file_size + 1);
     if (*buffer == NULL) {
-        fprintf(stderr, "Couldn't allocate memory for file '%s'.\n", file_path);
+        // fprintf(stderr, "Couldn't allocate memory for file '%s'.\n", file_path);
         return READ_FILE_COULD_NOT_ALLOCATE_MEMORY_FOR_FILE;
     }
 
     size_t bytes_read = fread(*buffer, sizeof(char), file_size, file);
     if (bytes_read < file_size) {
-        fprintf(stderr, "Couldn't read file '%s'.\n", file_path);
+        free(*buffer);
+        // fprintf(stderr, "Couldn't read file '%s'.\n", file_path);
         return READ_FILE_COULD_NOT_READ_FILE;
     }
 
@@ -59,12 +61,44 @@ const char* getReadFileResultErrorMessage(ReadFileResult result) {
         case READ_FILE_COULD_NOT_OPEN_FILE:
             return "Couldn't open file";
         case READ_FILE_COULD_NOT_ALLOCATE_MEMORY_FOR_FILE:
-            return "Couldn't read file";
+            return "Couldn't allocate memory to read file";
         case READ_FILE_COULD_NOT_READ_FILE:
             return "Couldn't read file";
         case READ_FILE_SUCCESS:
         default:
             assert(false);
     }
+}
+
+char* concatenatePath(
+    char* path_l, 
+    const char* path_r_start, 
+    size_t path_r_length
+) {
+    assert(path_l);
+    assert(path_r_start);
+
+    size_t path_l_length = strlen(path_l);
+    char* path = realloc(path_l, path_l_length + 1 + path_r_length + 1);
+    path[path_l_length] = PATH_SEPARATOR;
+    memcpy(path + path_l_length + 1, path_r_start, path_r_length);
+    path[path_l_length + 1 + path_r_length] = '\0';
+    return path;
+}
+
+char* addExtensionToPath(
+    char* path,
+    const char* extension
+) {
+    assert(path);
+    assert(extension);
+
+    size_t path_length = strlen(path);
+    size_t extension_length = strlen(extension);
+    path = realloc(path, path_length + extension_length + 2);
+    path[path_length] = '.';
+    memcpy(path + path_length + 1, extension, extension_length);
+    path[path_length + 1 + extension_length] = '\0';
+    return path;
 }
 

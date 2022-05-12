@@ -16,6 +16,8 @@
 #define GC_INITIAL_THRESHOLD            0
 #define GC_THRESHOLD_HEAP_GROWTH_FACTOR 0
 
+// #define DEBUG_HEAP
+
 
 // ┌───────┐
 // │ Types │

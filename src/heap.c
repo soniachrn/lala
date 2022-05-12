@@ -177,7 +177,7 @@ void fdumpObject(FILE* out, const Object* object, int padding) {
                 }
                 fprintf(out, "\n");
             }
-            fprintf(out, "  ]\n");
+            printf("  ]\n");
         } else {
             fprintf(out, "*(NULL)\n");
         }
@@ -213,7 +213,9 @@ Object* allocateEmptyObject(
     Object* object = calloc(sizeof(Object), 1);
     // TODO: check that object has been allocated
     
+#ifdef DEBUG_HEAP
     printf("allocate %p\n", (void*)object);
+#endif
 
     object->reference_rule = reference_rule;
     object->custom_reference_rule = custom_reference_rule;
@@ -261,7 +263,9 @@ void deallocateObject(Heap* heap, Object* object) {
     assert(heap);
     ASSERT_OBJECT(object);
 
+#ifdef DEBUG_HEAP
     printf("deallocate %p\n", (void*)object);
+#endif
 
     heap->size -= sizeof(Object) + object->size;
     free(object->value);
@@ -282,8 +286,10 @@ static void collectGarbage(
     assert(stack);
     assert(stack_references_positions);
 
+#ifdef DEBUG_HEAP
     printf("\nGC\n");
     printf("heap size before start: %ld\n", heap->size);
+#endif
 
     // Mark.
     for (
@@ -319,7 +325,9 @@ static void collectGarbage(
         object = next;
     }
 
+#ifdef DEBUG_HEAP
     printf("heap size after end: %ld\n\n", heap->size);
+#endif
 
     // Calculate next gc threshold.
     heap->next_gc = heap->size * GC_THRESHOLD_HEAP_GROWTH_FACTOR;

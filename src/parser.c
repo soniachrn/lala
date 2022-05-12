@@ -13,12 +13,30 @@
 // │ Macros │
 // └────────┘
 
+#define VALIDATE_HALF_INITIALIZED_PARSER(parser) \
+    (                                            \
+        parser &&                                \
+        parser->chunk                            \
+    )
+
 #define VALIDATE_PARSER(parser) \
     (                           \
         parser &&               \
         parser->lexer &&        \
         parser->chunk           \
     )
+
+#define ASSERT_HALF_INITIALIZED_PARSER(parser)           \
+    if (!VALIDATE_HALF_INITIALIZED_PARSER(parser)) {     \
+        fprintf(stderr,                                  \
+            "%s:%d, in %s:\nParser assertion failed.\n", \
+            __FILENAME__,                                \
+            __LINE__,                                    \
+            __FUNCTION_NAME__                            \
+        );                                               \
+        fdumpParser(stderr, parser, 0);                  \
+        exit(1);                                         \
+    }
 
 #define ASSERT_PARSER(parser)                            \
     if (!VALIDATE_PARSER(parser)) {                      \
@@ -31,8 +49,6 @@
         fdumpParser(stderr, parser, 0);                  \
         exit(1);                                         \
     }
-
-#define SYMBOL_TABLE_INVALID_ADDRESS 0
 
 
 // ┌──────────────────────────────┐
@@ -154,27 +170,36 @@ OpCode getOpSetOnStackForValueType(
 // │ Function implementations │
 // └──────────────────────────┘
 
-void initParser(Parser* parser, Lexer* lexer, Stack* chunk) {
+void initParser(Parser* parser, Stack* chunk) {
     assert(parser);
+    assert(chunk);
 
-    parser->lexer = lexer;
+    initHashMap(&parser->includes);
+    parser->lexer = NULL;
     parser->chunk = chunk;
     parser->did_read_next = false;
     parser->panic_mode = false;
     parser->had_error = false;
     parser->scope = createScope(NULL);
     parser->constants.count = 0;
+    initStack(&parser->free_on_end);
 
-    ASSERT_PARSER(parser);
+    ASSERT_HALF_INITIALIZED_PARSER(parser);
 }
 
 void freeParser(Parser* parser) {
-    ASSERT_PARSER(parser);
+    ASSERT_HALF_INITIALIZED_PARSER(parser);
 
+    freeHashMap(&parser->includes);
     parser->lexer = NULL;
     parser->chunk = NULL;
     parser->did_read_next = false;
     deleteScope(parser->scope);
+
+    while (stackSize(&parser->free_on_end) > 0) {
+        free((void*)popAddressFromStack(&parser->free_on_end));
+    }
+    freeStack(&parser->free_on_end);
 }
 
 void dumpParser(const Parser* parser) {
@@ -197,7 +222,7 @@ void fdumpParser(FILE* out, const Parser* parser, int padding) {
     } else {
         fprintf(out, "Parser *(%p) %s {\n",
             (const void*)parser,
-            VALIDATE_PARSER(parser) ? "VALID" : "INVALID"
+            VALIDATE_HALF_INITIALIZED_PARSER(parser) ? "VALID" : "INVALID"
         );
         printf("  previous = %s\n", tokenTypeName(parser->previous.type));
         printf("  next = %s\n", tokenTypeName(parser->next.type));
@@ -212,6 +237,76 @@ void fdumpParser(FILE* out, const Parser* parser, int padding) {
     }
 
 #undef printf
+}
+
+ParseFileResult parseFile(Parser* parser, const char* file_path) {
+    ASSERT_HALF_INITIALIZED_PARSER(parser);
+    
+    size_t file_path_length = strlen(file_path);
+    IncludeState include_state = INCLUDE_NOT_STARTED;
+    getFromHashMap(&parser->includes, file_path, file_path_length, (size_t*)&include_state);
+
+    if (include_state == INCLUDE_IN_PROCESS) {
+        return (ParseFileResult){
+            PARSE_FILE_RECURSIVE_INCLUDE,
+            READ_FILE_SUCCESS
+        };
+    }
+
+    else if (include_state == INCLUDE_NOT_STARTED) {
+        storeInHashMap(
+            &parser->includes,
+            file_path,
+            file_path_length,
+            INCLUDE_IN_PROCESS
+        );
+
+        char* source = NULL;
+        ReadFileResult read_file_result = readFile(file_path, &source);
+        if (read_file_result != READ_FILE_SUCCESS) {
+            return (ParseFileResult){
+                PARSE_FILE_READ_FILE_ERROR,
+                read_file_result
+            };
+        }
+        pushAddressOnStack(&parser->free_on_end, (size_t)source);
+
+        parseString(parser, source);
+
+        storeInHashMap(&parser->includes, file_path, file_path_length, INCLUDE_FINISHED);
+    }
+
+    ASSERT_HALF_INITIALIZED_PARSER(parser);
+    return (ParseFileResult){
+        PARSE_FILE_SUCCESS,
+        READ_FILE_SUCCESS
+    };
+}
+
+void parseString(Parser* parser, const char* source) {
+    ASSERT_HALF_INITIALIZED_PARSER(parser);
+
+    Lexer new_lexer;
+    initLexer(&new_lexer, source);
+
+    Lexer* old_lexer          = parser->lexer;
+    Token  old_previous_token = parser->previous;
+    Token  old_next_token     = parser->next;
+    bool   old_did_read_next  = parser->did_read_next;
+
+    parser->lexer         = &new_lexer;
+    parser->did_read_next = false;
+
+    parse(parser);
+
+    parser->lexer         = old_lexer;
+    parser->previous      = old_previous_token;
+    parser->next          = old_next_token;
+    parser->did_read_next = old_did_read_next;
+
+    freeLexer(&new_lexer);
+
+    ASSERT_HALF_INITIALIZED_PARSER(parser);
 }
 
 void parse(Parser* parser) {
@@ -393,6 +488,7 @@ static void synchronize(Parser* parser) {
 
     while (true) {
         switch (peekNext(parser)) {
+            case TOKEN_INCLUDE:
             case TOKEN_VAR:
             case TOKEN_FUNCTION:
             case TOKEN_STRUCTURE:
@@ -420,48 +516,73 @@ static void synchronize(Parser* parser) {
 static StatementProperties parseGlobalStatement(Parser* parser) {
     ASSERT_PARSER(parser);
     
+    StatementProperties statement_properties = { false };
+
     switch (peekNext(parser)) {
-        case TOKEN_INCLUDE:
-            return parseInclude(parser);
-        default:
-            return parseDeclaration(parser);
+        case TOKEN_INCLUDE: statement_properties = parseInclude(parser);     break;
+        default:            statement_properties = parseDeclaration(parser); break;
     }
+
+    if (parser->panic_mode) {
+        synchronize(parser);
+    }
+
+    ASSERT_PARSER(parser);
+    return statement_properties;
 }
 
 static StatementProperties parseInclude(Parser* parser) {
     ASSERT_PARSER(parser);
 
-#ifdef _WIN32
-    const char path_separator = '\\';
-#else
-    const char path_separator = '/';
-#endif
-
-    forceMatch(parser, TOKEN_INCLUDE);
+    Token statement_start_token = forceMatch(parser, TOKEN_INCLUDE);
 
     Token identifier = forceMatch(parser, TOKEN_IDENTIFIER);
-    size_t path_length = identifier.length;
-    char* path = malloc(path_length);
+    char* path = malloc(identifier.length + 1);
     memcpy(path, identifier.start, identifier.length);
+    path[identifier.length] = '\0';
 
     while (match(parser, TOKEN_DOT)) {
         identifier = forceMatch(parser, TOKEN_IDENTIFIER);
+        path = concatenatePath(path, identifier.start, identifier.length);
+    }
+    path = addExtensionToPath(path, "lala");
+    pushAddressOnStack(&parser->free_on_end, (size_t)path);
 
-        size_t new_path_length = path_length + 1 + identifier.length;
-        path = realloc(path, new_path_length);
-        path[path_length] = path_separator;
-        memcpy(path + path_length + 1, identifier.start, identifier.length);
-        path_length = new_path_length;
+    if (parser->panic_mode) {
+        ASSERT_PARSER(parser);
+        StatementProperties statement_properties = { false };
+        return statement_properties;
     }
     
-    path = realloc(path, path_length + 6);
-    path[path_length] = '.';
-    path[path_length] = 'l';
-    path[path_length] = 'a';
-    path[path_length] = 'l';
-    path[path_length] = 'a';
-    path[path_length] = '\0';
-    
+    ParseFileResult parse_file_result = parseFile(parser, path);
+    switch (parse_file_result.type) {
+        case PARSE_FILE_RECURSIVE_INCLUDE:
+            error(
+                parser,
+                "Semantic",
+                statement_start_token,
+                previous(parser),
+                "Attempt to recursively include file %s.",
+                path
+            );
+            break;
+        case PARSE_FILE_READ_FILE_ERROR:
+            error(
+                parser,
+                "File read",
+                statement_start_token,
+                previous(parser),
+                "%s %s.",
+                getReadFileResultErrorMessage(parse_file_result.read_file_result),
+                path
+            );
+            break;
+        case PARSE_FILE_SUCCESS:
+            break;
+        default:
+            assert(false);
+    }
+
     ASSERT_PARSER(parser);
     StatementProperties statement_properties = { false };
     return statement_properties;
@@ -511,6 +632,12 @@ static StatementProperties parseVariable(Parser* parser) {
             valueTypeName(variable_type),
             valueTypeName(initializer_value_type)
         );
+    }
+
+    if (parser->panic_mode) {
+        ASSERT_PARSER(parser);
+        StatementProperties statement_properties = { false };
+        return statement_properties;
     }
 
     // Declare variable

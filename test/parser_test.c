@@ -11,7 +11,10 @@ static Parser* createParser(const char* input) {
     initStack(chunk);
 
     Parser* parser = calloc(1, sizeof(Parser));
-    initParser(parser, lexer, chunk);
+    // initParser(parser, lexer, chunk);
+    initParser(parser, chunk);
+
+    parser->lexer = lexer;
 
     return parser;
 }
