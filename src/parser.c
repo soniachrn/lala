@@ -242,10 +242,18 @@ void fdumpParser(FILE* out, const Parser* parser, int padding) {
 ParseFileResult parseFile(Parser* parser, const char* file_path) {
     ASSERT_HALF_INITIALIZED_PARSER(parser);
     
+    // Get the include state of the file.
     size_t file_path_length = strlen(file_path);
     IncludeState include_state = INCLUDE_NOT_STARTED;
-    getFromHashMap(&parser->includes, file_path, file_path_length, (size_t*)&include_state);
+    getFromHashMap(
+        &parser->includes,
+        file_path,
+        file_path_length,
+        (size_t*)&include_state
+    );
 
+    // If inclusion is in process already, a recursive inclusion
+    // occurred, which results in a compile error.
     if (include_state == INCLUDE_IN_PROCESS) {
         return (ParseFileResult){
             PARSE_FILE_RECURSIVE_INCLUDE,
@@ -253,6 +261,7 @@ ParseFileResult parseFile(Parser* parser, const char* file_path) {
         };
     }
 
+    // If this file was not included before, parse it.
     else if (include_state == INCLUDE_NOT_STARTED) {
         storeInHashMap(
             &parser->includes,
@@ -262,7 +271,8 @@ ParseFileResult parseFile(Parser* parser, const char* file_path) {
         );
 
         char* source = NULL;
-        ReadFileResult read_file_result = readFile(file_path, &source);
+        size_t source_length = 0;
+        ReadFileResult read_file_result = readFile(file_path, &source, &source_length);
         if (read_file_result != READ_FILE_SUCCESS) {
             return (ParseFileResult){
                 PARSE_FILE_READ_FILE_ERROR,
@@ -273,8 +283,16 @@ ParseFileResult parseFile(Parser* parser, const char* file_path) {
 
         parseString(parser, source);
 
-        storeInHashMap(&parser->includes, file_path, file_path_length, INCLUDE_FINISHED);
+        storeInHashMap(
+            &parser->includes,
+            file_path,
+            file_path_length,
+            INCLUDE_FINISHED
+        );
     }
+
+    // If this file was included before already, don't do anything.
+    else { }
 
     ASSERT_HALF_INITIALIZED_PARSER(parser);
     return (ParseFileResult){
@@ -312,10 +330,7 @@ void parseString(Parser* parser, const char* source) {
 void parse(Parser* parser) {
     ASSERT_PARSER(parser);
 
-    while (
-        peekNext(parser) != TOKEN_END &&
-        peekNext(parser) != TOKEN_ERROR
-    ) {
+    while (peekNext(parser) != TOKEN_END) {
         parseGlobalStatement(parser);
     }
 
@@ -363,7 +378,6 @@ ValueType* parseExpression(Parser* parser) {
                 start_token.line                                \
             );                                                  \
                                                                 \
-                                                                \
             /* Highlight the error tokens */                    \
             fprintf(stderr, "%*s", start_token.symbol - 1, ""); \
             uint8_t highlight_length;                           \
@@ -403,9 +417,10 @@ static void readNext(Parser* parser) {
     parser->did_read_next = true;
 
     parser->next = readToken(parser->lexer);
-    while (parser->next.type == TOKEN_ERROR) {
+    // while (parser->next.type == TOKEN_ERROR) {
+    if (parser->next.type == TOKEN_ERROR) {
         errorAtNext(parser, "Lexical", "%.*s", parser->next.length, parser->next.start);
-        parser->next = readToken(parser->lexer);
+        // parser->next = readToken(parser->lexer);
     }
 
     ASSERT_PARSER(parser);
@@ -442,10 +457,13 @@ static TokenType advance(Parser* parser) {
         parser->did_read_next = false;
     } else {
         parser->previous = readToken(parser->lexer);
-        while (parser->previous.type == TOKEN_ERROR) {
+        if (parser->previous.type == TOKEN_ERROR) {
             errorAtPrevious(parser, "Lexical", "%.*s", parser->previous.length, parser->previous.start);
-            parser->previous = readToken(parser->lexer);
         }
+        // while (parser->previous.type == TOKEN_ERROR) {
+        //     errorAtPrevious(parser, "Lexical", "%.*s", parser->previous.length, parser->previous.start);
+        //     parser->previous = readToken(parser->lexer);
+        // }
     }
 
     ASSERT_PARSER(parser);
@@ -536,6 +554,7 @@ static StatementProperties parseInclude(Parser* parser) {
 
     Token statement_start_token = forceMatch(parser, TOKEN_INCLUDE);
 
+    // Include file path.
     Token identifier = forceMatch(parser, TOKEN_IDENTIFIER);
     char* path = malloc(identifier.length + 1);
     memcpy(path, identifier.start, identifier.length);
@@ -548,12 +567,14 @@ static StatementProperties parseInclude(Parser* parser) {
     path = addExtensionToPath(path, "lala");
     pushAddressOnStack(&parser->free_on_end, (size_t)path);
 
+    // Make sure parsed include file path without errors.
     if (parser->panic_mode) {
         ASSERT_PARSER(parser);
         StatementProperties statement_properties = { false };
         return statement_properties;
     }
     
+    // Parse the include file.
     ParseFileResult parse_file_result = parseFile(parser, path);
     switch (parse_file_result.type) {
         case PARSE_FILE_RECURSIVE_INCLUDE:
@@ -622,6 +643,13 @@ static StatementProperties parseVariable(Parser* parser) {
     forceMatch(parser, TOKEN_EQUAL);
     Token expression_start_token = next(parser);
     ValueType* initializer_value_type = parseExpression(parser);
+
+    if (parser->panic_mode) {
+        ASSERT_PARSER(parser);
+        StatementProperties statement_properties = { false };
+        return statement_properties;
+    }
+
     if (!valueTypesEqual(variable_type, initializer_value_type)) {
         error(
             parser,
@@ -753,6 +781,13 @@ static StatementProperties parseFunction(Parser* parser) {
     // Return type
     forceMatch(parser, TOKEN_COLON);
     ValueType* return_type = parseValueType(parser);
+
+    if (parser->panic_mode) {
+        ASSERT_PARSER(parser);
+        StatementProperties statement_properties = { false };
+        return statement_properties;
+    }
+
     function_type->as.function.return_type = return_type;
     function_scope->return_type = return_type;
 
@@ -1237,6 +1272,12 @@ static StatementProperties parseReturn(Parser* parser) {
         Token expression_start_token = next(parser);
         ValueType* return_expression_type = parseExpression(parser);
         
+        if (parser->panic_mode) {
+            ASSERT_PARSER(parser);
+            StatementProperties statement_properties = { true };
+            return statement_properties;
+        }
+
         // Make sure return value's type corresponds with the function return type.
         if (!valueTypesEqual(expected_return_type, return_expression_type)) {
             error(

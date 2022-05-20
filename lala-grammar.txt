@@ -55,7 +55,7 @@ declaration     : variable
                 ;
 variable        : VAR? typed-id init? ;         # Bad here
 init            : EQUAL expression ;
-function        : FUNCTION ID parameters type-spec block? ;
+function        : FUNCTION ID parameters type-spec statement ;
 parameters      : LPAREN (variable (COMMA variable)* COMMA?)? RPAREN ;
 structure       : STRUCTURE ID LBRACE member* RBRACE ;
 enum            : ENUM 
@@ -76,7 +76,7 @@ statement       : print
                 | function-call
                 | CONTINUE
                 | BREAK
-                | RETURN
+                | return
                 | block
                 ;
 print           : PRINT expression ;
@@ -95,6 +95,7 @@ while           : WHILE expression statement ;
 do-while        : DO statement WHILE expression ;
 for             : FOR ID IN expression statement ;
 function-call   : postfix ;                                 # Compiler should force this postfix to end with a call.
+return          : RETURN expression? ;
 block           : LBRACE declaration RBRACE ;
 
 # Expression

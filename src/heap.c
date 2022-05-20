@@ -28,7 +28,6 @@
             object->reference_rule == REFERENCE_RULE_CUSTOM ||    \
             !object->custom_reference_rule                        \
         ) &&                                                      \
-        object->size > 0 &&                                       \
         object->value                                             \
     )
 
@@ -300,6 +299,10 @@ static void collectGarbage(
         markObject((Object*)getAddressFromStack(stack, *reference_position));
     }
 
+#ifdef DEBUG_HEAP
+    printf("mark done\n");
+#endif
+
     // Sweep.
     Object* last_reachable_object;
     for (Object* object = heap->first; object != NULL;) {
@@ -326,6 +329,7 @@ static void collectGarbage(
     }
 
 #ifdef DEBUG_HEAP
+    printf("sweep done\n");
     printf("heap size after end: %ld\n\n", heap->size);
 #endif
 

@@ -31,6 +31,7 @@ typedef struct CallFrame CallFrame;
 typedef struct {
     size_t   source_size;
     uint8_t* source;
+    uint8_t* current_op_code;
     uint8_t* ip;
 
     Constants* constants;

@@ -19,10 +19,15 @@ typedef enum {
     READ_FILE_SUCCESS,
 } ReadFileResult;
 
-ReadFileResult readFile(const char* file_path, char** buffer);
+ReadFileResult readFile(
+    const char* file_path,
+    char** buffer,
+    size_t* length
+);
 ReadFileResult readFileAndPrintErrors(
     const char* file_path,
     char** buffer,
+    size_t* length,
     FILE* out
 );
 

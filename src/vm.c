@@ -34,6 +34,28 @@
         exit(1);                                     \
     }
 
+#define error(vm, ...)                                      \
+    {                                                       \
+        fprintf(                                            \
+            stderr,                                         \
+            "Runtime error at instruction '%s' at 0x%lx:\n", \
+            opCodeName((OpCode)*vm->current_op_code),       \
+            (size_t)(vm->current_op_code - vm->source)      \
+        );                                                  \
+        fprintf(stderr, __VA_ARGS__);                       \
+        fprintf(stderr, "\n");                              \
+        exit(1);                                            \
+    }
+
+#define notImplemented(vm)                           \
+    {                                                \
+        error(                                       \
+            vm,                                      \
+            "%s is not implemented yet.",            \
+            opCodeName((OpCode)*vm->current_op_code) \
+        );                                           \
+    }
+
 
 // ┌──────────────────────────────┐
 // │ Static function declarations │
@@ -63,10 +85,11 @@ void initVM(
 ) {
     assert(vm);
 
-    vm->source_size = source_size;
-    vm->source      = source;
-    vm->ip          = source;
-    vm->constants   = constants;
+    vm->source_size     = source_size;
+    vm->source          = source;
+    vm->current_op_code = NULL;
+    vm->ip              = source;
+    vm->constants       = constants;
 
     initStack(&vm->stack);
     initHeap(&vm->heap);
@@ -84,8 +107,9 @@ void freeVM(VM* vm) {
 
     popCallFrame(vm);
 
-    vm->source = NULL;
-    vm->ip = NULL;
+    vm->source          = NULL;
+    vm->current_op_code = NULL;
+    vm->ip              = NULL;
 
     freeStack(&vm->stack);
     freeHeap(&vm->heap);
@@ -172,17 +196,15 @@ void fdumpVM(FILE* out, const VM* vm, int padding) {
 void interpret(VM* vm) {
     ASSERT_VM(vm);
 
-    // TODO check that ip didn't encounter '\0' when doint vm->ip +=
-
-#define CLEAN_STACK_REFERENCES()                                                 \
-{                                                                                \
-    while (                                                                      \
-        stackSize(&vm->stack_references_positions) > 0 &&                        \
-        *(size_t*)(vm->stack_references_positions.stack_top - sizeof(size_t)) >= \
-        stackSize(&vm->stack)                                                    \
-    ) {                                                                          \
-        popAddressFromStack(&vm->stack_references_positions);                    \
-    }                                                                            \
+#define CLEAN_STACK_REFERENCES()                                                \
+{                                                                               \
+    while (                                                                     \
+        stackSize(&vm->stack_references_positions) > 0 &&                       \
+        *(size_t*)(vm->stack_references_positions.stack_top - sizeof(size_t)) > \
+        stackSize(&vm->stack) - sizeof(size_t)                                  \
+    ) {                                                                         \
+        popAddressFromStack(&vm->stack_references_positions);                   \
+    }                                                                           \
 }
 
 
@@ -198,11 +220,6 @@ void interpret(VM* vm) {
         );                                   \
         PUSH_PLAIN_ADDRESS(value);           \
     }
-
-// #define POP_BYTE()    popByteFromStack(   &vm->stack)
-// #define POP_INT()     popIntFromStack(    &vm->stack)
-// #define POP_FLOAT()   popFloatFromStack(  &vm->stack)
-// #define POP_ADDRESS() popAddressFromStack(&vm->stack)
 
 #define POP_BYTE()                                      \
     ({                                                  \
@@ -234,6 +251,7 @@ void interpret(VM* vm) {
 
 
     while (!isAtEnd(vm)) {
+        vm->current_op_code = vm->ip;
         switch ((OpCode)readByteFromSource(vm)) {
             // Stack
             case OP_PUSH_TRUE:    PUSH_BYTE(1); break;
@@ -255,7 +273,16 @@ void interpret(VM* vm) {
             // Heap  
             case OP_LOAD_CONSTANT: {
                 uint8_t constant_index = readByteFromSource(vm);
-                assert(constant_index < vm->constants->count);
+                if (constant_index >= vm->constants->count) {
+                    error(
+                        vm,
+                        "Trying to access constant %d, whereas there are only %d"
+                        "constants declared in the constants section.",
+                        constant_index,
+                        vm->constants->count
+                    );
+                }
+
                 Constant constant = vm->constants->constants[constant_index];
                 Object* object = allocateObjectFromValue(
                     &vm->heap,
@@ -294,12 +321,21 @@ void interpret(VM* vm) {
                 break;
             }
 
-#define GET_FROM_HEAP_OP(type, push)                   \
-    {                                                  \
-        Object* object = (Object*)POP_ADDRESS();       \
-        size_t offset = readAddressFromSource(vm);     \
-        assert(offset + sizeof(type) <= object->size); \
-        push(*(type*)(object->value + offset));        \
+#define GET_FROM_HEAP_OP(type, push)                                          \
+    {                                                                         \
+        Object* object = (Object*)POP_ADDRESS();                              \
+        size_t offset = readAddressFromSource(vm);                            \
+        if (offset + sizeof(type) > object->size) {                           \
+            error(                                                            \
+                vm,                                                           \
+                "Trying to read %lu bytes from a heap object at offset %lu, " \
+                "but the object is only %lu bytes long.",                     \
+                sizeof(type),                                                 \
+                offset,                                                       \
+                object->size                                                  \
+            );                                                                \
+        }                                                                     \
+        push(*(type*)(object->value + offset));                               \
     }
 
             case OP_GET_BYTE_FROM_HEAP:    GET_FROM_HEAP_OP(uint8_t, PUSH_BYTE);        break;
@@ -309,13 +345,22 @@ void interpret(VM* vm) {
 
 #undef GET_FROM_HEAP_OP
 
-#define SET_ON_HEAP_OP(type, pop)                      \
-    {                                                  \
-        type value = pop();                            \
-        Object* object = (Object*)POP_ADDRESS();       \
-        size_t offset = readAddressFromSource(vm);     \
-        assert(offset + sizeof(type) <= object->size); \
-        *(type*)(object->value + offset) = value;      \
+#define SET_ON_HEAP_OP(type, pop)                                          \
+    {                                                                      \
+        type value = pop();                                                \
+        Object* object = (Object*)POP_ADDRESS();                           \
+        size_t offset = readAddressFromSource(vm);                         \
+        if (offset + sizeof(type) > object->size) {                        \
+            error(                                                         \
+                vm,                                                        \
+                "Trying to set %lu bytes in a heap object at offset %lu, " \
+                "but the object is only %lu bytes long.",                  \
+                sizeof(type),                                              \
+                offset,                                                    \
+                object->size                                               \
+            );                                                             \
+        }                                                                  \
+        *(type*)(object->value + offset) = value;                          \
     }
 
             case OP_SET_BYTE_ON_HEAP:    SET_ON_HEAP_OP(uint8_t, POP_BYTE);    break;
@@ -334,17 +379,17 @@ void interpret(VM* vm) {
             case OP_EQUALS_BOOL:   PUSH_BYTE(POP_BYTE() == POP_BYTE()); break;
             case OP_EQUALS_INT:    PUSH_BYTE(POP_INT()  == POP_INT());  break;
             case OP_EQUALS_FLOAT:  PUSH_BYTE(fabs(POP_FLOAT() - POP_FLOAT()) < EPSILON); break;
-            case OP_EQUALS_STRING: assert(false); // TODO: Not implemented yet
+            case OP_EQUALS_STRING: notImplemented(vm); break;
 
             // Inversed comparison sign here and later, 
             // because operand order on stack is inversed.
             case OP_LESS_INT:    PUSH_BYTE(POP_INT()   > POP_INT()); break;
             case OP_LESS_FLOAT:  PUSH_BYTE(POP_FLOAT() > POP_FLOAT()); break;
-            case OP_LESS_STRING: assert(false); // TODO: Not implemented yet
+            case OP_LESS_STRING: notImplemented(vm); break;
 
             case OP_GREATER_INT:    PUSH_BYTE(POP_INT()   < POP_INT());   break;
             case OP_GREATER_FLOAT:  PUSH_BYTE(POP_FLOAT() < POP_FLOAT()); break;
-            case OP_GREATER_STRING: assert(false); // TODO: Not implemented yet
+            case OP_GREATER_STRING: notImplemented(vm); break;
 
             // Math
             case OP_ADD_INT:        PUSH_INT(  POP_INT()   + POP_INT());   break;
@@ -357,22 +402,40 @@ void interpret(VM* vm) {
             case OP_DIVIDE_INT: {
                 int32_t r = POP_INT();
                 int32_t l = POP_INT();
+                if (r == 0) {
+                    error(
+                        vm,
+                        "Division right operand is zero."
+                    );
+                }
                 PUSH_INT(l / r);
                 break;
             }
             case OP_DIVIDE_FLOAT: {
                 double r = POP_FLOAT();
                 double l = POP_FLOAT();
+                if (fabs(r) < EPSILON) {
+                    error(
+                        vm,
+                        "Division right operand is zero."
+                    );
+                }
                 PUSH_FLOAT(l / r);
                 break;
             }
             case OP_MODULO_INT: {
                 int32_t r = POP_INT();
                 int32_t l = POP_INT();
+                if (r == 0) {
+                    error(
+                        vm,
+                        "Modulo right operand is zero."
+                    );
+                }
                 PUSH_INT(l % r);
                 break;
             }
-            case OP_MODULO_FLOAT: assert(false); // TODO: Not implemented yet
+            case OP_MODULO_FLOAT: notImplemented(vm); break;
 
             case OP_NEGATE_INT:   PUSH_INT(-POP_INT());     break;
             case OP_NEGATE_FLOAT: PUSH_FLOAT(-POP_FLOAT()); break;
@@ -516,14 +579,30 @@ void interpret(VM* vm) {
                 size_t offset_from_call_frame_start = readAddressFromSource(vm);
 
                 pushCallFrame(vm);
-                assert(offset_from_call_frame_start <= vm->call_frame->stack_offset);
+                if (offset_from_call_frame_start > vm->call_frame->stack_offset) {
+                    error(
+                        vm,
+                        "In a call instruction, got offset from call frame start "
+                        "argument = %lu, whereas the stack size is only %lu.",
+                        offset_from_call_frame_start,
+                        vm->call_frame->stack_offset
+                    );
+                }
                 vm->call_frame->stack_offset -= offset_from_call_frame_start;
 
                 Object* function_object = (Object*)getAddressFromStack(
                     &vm->stack,
                     vm->call_frame->stack_offset + FUNCTION_ADDRESS_POSITION_IN_CALL_FRAME
                 );
-                assert(function_object->size == sizeof(size_t));
+                if (function_object->size != sizeof(size_t)) {
+                    error(
+                        vm,
+                        "In a call instruction, the function object size is %lu,"
+                        "expected to be %lu.",
+                        function_object->size,
+                        sizeof(size_t)
+                    );
+                }
                 size_t function_address = *(size_t*)function_object->value;
                 vm->ip = vm->source + function_address;
                 break;
@@ -585,7 +664,7 @@ void interpret(VM* vm) {
 
 #undef SUBSCRIPT_OP
 
-            default: assert(false); // TODO: error
+            default: error(vm, "Invalid instruction."); break;
         }
     }
 
@@ -646,8 +725,7 @@ static uint8_t readByteFromSource(VM* vm) {
     ASSERT_VM(vm);
 
     if (isAtEnd(vm)) {
-        fprintf(stderr, "Runtime error: expected a byte argument to command %02X, but got end of program.", *(vm->ip - 1));
-        exit(1);
+        error(vm, "Expected a byte argument, but got end of program.");
     }
 
     return *vm->ip++;
@@ -657,8 +735,7 @@ static int32_t readIntFromSource(VM* vm) {
     ASSERT_VM(vm);
 
     if (!hasEnoughInputBytes(vm, sizeof(uint32_t))) {
-        fprintf(stderr, "Runtime error: expected an int argument to command %02X, but got end of program.", *(vm->ip - 1));
-        exit(1);
+        error(vm, "Expected an int argument, but got end of program.");
     }
 
     int32_t value = *(int32_t*)vm->ip;
@@ -670,8 +747,7 @@ static double readFloatFromSource(VM* vm) {
     ASSERT_VM(vm);
 
     if (!hasEnoughInputBytes(vm, sizeof(double))) {
-        fprintf(stderr, "Runtime error: expected a float argument to command %02X, but got end of program.", *(vm->ip - 1));
-        exit(1);
+        error(vm, "Expected a float argument, but got end of program.");
     }
 
     double value = *(double*)vm->ip;
@@ -683,8 +759,7 @@ static size_t readAddressFromSource(VM* vm) {
     ASSERT_VM(vm);
 
     if (!hasEnoughInputBytes(vm, sizeof(size_t))) {
-        fprintf(stderr, "Runtime error: expected an address argument to command %02X, but got end of program.", *(vm->ip - 1));
-        exit(1);
+        error(vm, "Expected an address argument, but got end of program.");
     }
 
     size_t value = *(size_t*)vm->ip;
@@ -692,6 +767,9 @@ static size_t readAddressFromSource(VM* vm) {
     return value;
 }
 
+
+#undef notImplemented
+#undef error
 
 #undef ASSERT_VM
 #undef VALIDATE_VM

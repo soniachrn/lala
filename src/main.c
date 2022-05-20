@@ -39,7 +39,11 @@ static LalaArguments parseArguments(int argc, const char* argv[]);
 
 static void fillLalabyHeader(LalabyHeader* header, const Parser* parser);
 static void   serializeLalabyHeader(FILE* file, const LalabyHeader* header);
-static void deserializeLalabyHeader(const uint8_t* source, LalabyHeader* header);
+static void deserializeLalabyHeader(
+    const uint8_t* source,
+    const size_t source_length,
+    LalabyHeader* header
+);
 
 // static char* readFile(const char* filename);
 
@@ -232,9 +236,18 @@ static void serializeLalabyHeader(FILE* file, const LalabyHeader* header) {
     fwrite(&header->program_length, sizeof(size_t), 1, file);
 }
 
-static void deserializeLalabyHeader(const uint8_t* source, LalabyHeader* header) {
+static void deserializeLalabyHeader(
+    const uint8_t* source,
+    const size_t source_length,
+    LalabyHeader* header
+) {
     assert(source);
     assert(header);
+
+    if (source_length < 3 * sizeof(uint8_t) + 4 * sizeof(size_t)) {
+        fprintf(stderr, "Invalid lalaby file: file is less than lalaby header size.\n");
+        exit(1);
+    }
 
     header->version[0] = *source;
     source += sizeof(uint8_t);
@@ -251,6 +264,14 @@ static void deserializeLalabyHeader(const uint8_t* source, LalabyHeader* header)
     source += sizeof(size_t);
     header->program_length = *(const size_t*)source;
     source += sizeof(size_t);
+
+    if (
+        source_length < header->constants_offset + header->constants_length ||
+        source_length < header->program_offset   + header->program_length
+    ) {
+        fprintf(stderr, "Invalid lalaby file: header declares one of the sections to be larger than the file.\n");
+        exit(1);
+    }
 }
 
 static void help(LalaArguments arguments) {
@@ -268,23 +289,13 @@ static void help(LalaArguments arguments) {
 }
 
 static void compile(LalaArguments arguments) {
-    // char* source = NULL;
-    // if (readFileAndPrintErrors(arguments.input_filename, &source, stderr) != READ_FILE_SUCCESS) {
-    //     exit(1);
-    // }
-    // char* source = readFile(arguments.input_filename);
-    
-    // Init lexer, bytecode stack, parser
-    // Lexer lexer;
+    // Init bytecode stack, parser
     Stack bytecode;
     Parser parser;
-    // initLexer(&lexer, source);
     initStack(&bytecode);
-    // initParser(&parser, &lexer, &bytecode);
     initParser(&parser, &bytecode);
 
     // Parse
-    // parse(&parser);
     ParseFileResult result = parseFile(&parser, arguments.input_filename);
     switch (result.type) {
         case PARSE_FILE_RECURSIVE_INCLUDE:
@@ -324,23 +335,26 @@ static void compile(LalaArguments arguments) {
         fclose(file);
     }
 
-    // Free lexer, bytecode stack, parser
+    // Free bytecode stack, parser
     freeParser(&parser);
     freeStack(&bytecode);
-    // freeLexer(&lexer);
-
-    // free(source);
 }
 
 static void execute(LalaArguments arguments) {
     uint8_t* source = NULL;
-    if (readFileAndPrintErrors(arguments.input_filename, (char**)&source, stderr) != READ_FILE_SUCCESS) {
+    size_t source_length = 0;
+    if (readFileAndPrintErrors(
+            arguments.input_filename,
+            (char**)&source,
+            &source_length,
+            stderr
+        ) != READ_FILE_SUCCESS
+    ) {
         exit(1);
     }
-    // uint8_t* source = (uint8_t*)readFile(arguments.input_filename);
 
     LalabyHeader header;
-    deserializeLalabyHeader(source, &header);
+    deserializeLalabyHeader(source, source_length, &header);
 
     uint8_t* constants_section = source + header.constants_offset;
     uint8_t* program = source + header.program_offset;
@@ -365,13 +379,19 @@ static void lalaInterpret(LalaArguments arguments) {
 
 static void disassemble(LalaArguments arguments) {
     uint8_t* source = NULL;
-    if (readFileAndPrintErrors(arguments.input_filename, (char**)&source, stderr) != READ_FILE_SUCCESS) {
+    size_t source_length = 0;
+    if (readFileAndPrintErrors(
+            arguments.input_filename,
+            (char**)&source,
+            &source_length,
+            stderr
+        ) != READ_FILE_SUCCESS
+    ) {
         exit(1);
     }
-    // uint8_t* source = (uint8_t*)readFile(arguments.input_filename);
 
     LalabyHeader header;
-    deserializeLalabyHeader(source, &header);
+    deserializeLalabyHeader(source, source_length, &header);
 
     uint8_t* constants_section = source + header.constants_offset;
     uint8_t* program = source + header.program_offset;

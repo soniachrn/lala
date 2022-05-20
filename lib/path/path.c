@@ -7,7 +7,11 @@
 #include <string.h>
 
 
-ReadFileResult readFile(const char* file_path, char** buffer) {
+ReadFileResult readFile(
+    const char* file_path,
+    char** buffer,
+    size_t* length
+) {
     assert(file_path);
 
     FILE* file = fopen(file_path, "rb");
@@ -34,6 +38,7 @@ ReadFileResult readFile(const char* file_path, char** buffer) {
     }
 
     (*buffer)[bytes_read] = '\0';
+    *length = bytes_read;
 
     fclose(file);
     return READ_FILE_SUCCESS;
@@ -42,9 +47,10 @@ ReadFileResult readFile(const char* file_path, char** buffer) {
 ReadFileResult readFileAndPrintErrors(
     const char* file_path,
     char** buffer,
+    size_t* length,
     FILE* out
 ) {
-    ReadFileResult result = readFile(file_path, buffer);
+    ReadFileResult result = readFile(file_path, buffer, length);
     if (result != READ_FILE_SUCCESS) {
         fprintf(
             out,

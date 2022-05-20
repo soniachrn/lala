@@ -98,7 +98,7 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
         // stack
         printf("  stack = *(%p) [\n", (const void*)stack->stack);
         for (size_t i = 0; i < MIN(stack->capacity, (size_t)128);) {
-            printf("    %.2zu:", i);
+            printf("    %.2lx:", i);
             for (size_t j = 0; j < 8; ++j) {
                 printf(" %02X", stack->stack[i]);
                 i += 1;
@@ -113,7 +113,7 @@ void fdumpStack(FILE* out, const Stack* stack, int padding) {
         printf("  stack_top = *(%p) stack + %zu [\n", (const void*)stack->stack_top, stack_top_index);
         size_t n = MIN(stack->capacity - (size_t)(stack->stack_top - stack->stack), (size_t)8);
         for (size_t i = 0; i < n;) {
-            printf("    %.2zu:", stack_top_index + i);
+            printf("    %.2lx:", stack_top_index + i);
             for (size_t j = 0; j < 8; ++j) {
                 printf(" %02X", stack->stack_top[i]);
                 i += 1;
@@ -137,7 +137,16 @@ size_t stackSize(const Stack* stack) {
 
 void popBytesFromStack(Stack* stack, size_t count) {
     ASSERT_STACK(stack);
-    assert(count <= stackSize(stack));
+
+    if (count > stackSize(stack)) {
+        fprintf(
+            stderr,
+            "Trying to pop %lu bytes from a stack of size %lu.\n",
+            count,
+            stackSize(stack)
+        );
+        exit(1);
+    }
 
     stack->stack_top -= count * sizeof(uint8_t);
     shrinkIfNeeded(stack);
@@ -159,7 +168,18 @@ void popBytesFromStack(Stack* stack, size_t count) {
     type pop ## type_name ## FromStack(Stack* stack) {            \
         ASSERT_STACK(stack);                                      \
                                                                   \
-        assert(sizeof(type) <= stackSize(stack));                 \
+                                                                  \
+        if (sizeof(type) > stackSize(stack)) {                    \
+            fprintf(                                              \
+                stderr,                                           \
+                "Tring to pop a " #type_name " (size %lu) "       \
+                "from a stack of size %lu.\n",                    \
+                sizeof(type),                                     \
+                stackSize(stack)                                  \
+            );                                                    \
+            exit(1);                                              \
+        }                                                         \
+                                                                  \
         stack->stack_top -= sizeof(type);                         \
         type value = *((type*)stack->stack_top);                  \
         shrinkIfNeeded(stack);                                    \
@@ -177,7 +197,15 @@ void popBytesFromStack(Stack* stack, size_t count) {
                                                                   \
         if (address + sizeof(type) > stackSize(stack)) {          \
             /* TODO: error */                                     \
-            assert(false);                                        \
+            fprintf(                                              \
+                stderr,                                           \
+                "Trying to set a " #type_name " (size %lu) "      \
+                "with offset %lu in a stack of size %lu.\n",      \
+                sizeof(type),                                     \
+                address,                                          \
+                stackSize(stack)                                  \
+            );                                                    \
+            exit(1);                                              \
         }                                                         \
                                                                   \
         *(type*)(stack->stack + address) = value;                 \
@@ -192,10 +220,15 @@ void popBytesFromStack(Stack* stack, size_t count) {
         ASSERT_STACK(stack);                                      \
                                                                   \
         if (address + sizeof(type) > stackSize(stack)) {          \
-            /* TODO: error */                                     \
-            printf("%ld %ld\n", address + sizeof(type), stackSize(stack)); \
-            dumpStack(stack); \
-            assert(false);                                        \
+            fprintf(                                              \
+                stderr,                                           \
+                "Trying to get a " #type_name " (size %lu) "      \
+                "with offset %lu from a stack of size %lu.\n",    \
+                sizeof(type),                                     \
+                address,                                          \
+                stackSize(stack)                                  \
+            );                                                    \
+            exit(1);                                              \
         }                                                         \
                                                                   \
         ASSERT_STACK(stack);                                      \
@@ -218,7 +251,6 @@ static void reallocStack(Stack* stack, size_t new_capacity) {
     ASSERT_STACK(stack);
 
     if (new_capacity > STACK_MAX_CAPACITY) {
-        // TODO: error
         assert(false);
     }
 
@@ -226,7 +258,6 @@ static void reallocStack(Stack* stack, size_t new_capacity) {
 
     stack->stack = realloc(stack->stack, new_capacity);
     if (stack->stack == NULL) {
-        // TODO: error
         assert(false);
     }
 

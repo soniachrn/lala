@@ -64,16 +64,16 @@ void fdumpScope(FILE* out, const Scope* scope, int padding);
 VariableDeclarationResult declareVariableInScope(
     Scope* scope,
     const char* name,
-    size_t name_lengh,
-    ValueType* type
-);
-
-VariableDeclarationResult declarePlainStructureInScope(
-    Scope* scope,
-    const char* name,
     size_t name_length,
     ValueType* type
 );
+
+// VariableDeclarationResult declarePlainStructureInScope(
+//     Scope* scope,
+//     const char* name,
+//     size_t name_length,
+//     ValueType* type
+// );
 
 bool accessVariableInScope(
     const Scope* scope,
@@ -82,7 +82,7 @@ bool accessVariableInScope(
     Variable* variable
 );
 
-// Returns false if not in a function at the moment.
+// Returns NULL if not in a function at the moment.
 ValueType* getReturnType(const Scope* scope);
 
 

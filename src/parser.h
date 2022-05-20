@@ -27,20 +27,28 @@ typedef enum {
 } IncludeState;
 
 typedef struct {
+    // file name -> IncludeState
     HashMap includes;
+
+    // Input.
     Lexer* lexer;
+    // Output.
     Stack* chunk;
 
+    // Current position.
     Token previous;
     Token next;
     bool did_read_next;
 
+    // Error handling.
     bool panic_mode;
     bool had_error;
     
+    // Variables, VM constants.
     Scope* scope;
     Constants constants;
 
+    // File names and contents strings to be freed after parsing.
     Stack free_on_end;
 } Parser;
 

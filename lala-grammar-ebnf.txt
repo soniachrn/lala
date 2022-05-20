@@ -12,7 +12,11 @@
 
 
 (* Program *)
-program       = {declaration} ;
+program          = {declaration} ;
+global statement = include
+                 | declaration
+                 ;
+include          = INCLUDE, ID, {DOT, ID} ;
 
 
 (* Declaration *)
@@ -41,7 +45,7 @@ statement     = print
               | function call
               | CONTINUE
               | BREAK
-              | RETURN
+              | return
               | block
               ;
 print         = PRINT, expression ;
@@ -60,6 +64,7 @@ while         = WHILE, expression, statement ;
 do while      = DO, statement, WHILE, expression ;
 for           = FOR, ID, IN, expression, statement ;
 function call = postfix ;  (* Compiler should force this postfix to end with a call *)
+return        = RETURN [expression] ;
 block         = LBRACE, {declaration}, RBRACE ;
 
 
