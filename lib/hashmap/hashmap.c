@@ -270,7 +270,7 @@ static HashMapEntry* findEntry(
 static void growIfNeeded(HashMap* map) {
     ASSERT_HASH_MAP(map);
 
-    if (map->count > map->capacity * HASH_MAP_MAX_LOAD_FACTOR) {
+    if (map->count > map->capacity / HASH_MAP_MAX_LOAD_FACTOR) {
         resizeHashMap(map, map->capacity * 2);
     }
 
@@ -281,7 +281,7 @@ static void shrinkIfNeeded(HashMap* map) {
     ASSERT_HASH_MAP(map);
 
     if (map->capacity > INITIAL_HASH_MAP_SIZE && 
-        map->count < map->capacity * HASH_MAP_MIN_LOAD_FACTOR
+        map->count < map->capacity / HASH_MAP_MIN_LOAD_DIVISOR
     ) {
         resizeHashMap(map, map->capacity / 2);
     }

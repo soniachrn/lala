@@ -14,9 +14,8 @@
 // └────────┘
 
 #define INITIAL_HASH_MAP_SIZE 8
-#define HASH_MAP_MAX_LOAD_FACTOR     0.5
-#define HASH_MAP_REALLOC_LOAD_FACTOR 0.25
-#define HASH_MAP_MIN_LOAD_FACTOR     0.125
+#define HASH_MAP_MAX_LOAD_DIVISOR 2
+#define HASH_MAP_MIN_LOAD_DIVISOR 8
 
 
 // ┌───────┐
