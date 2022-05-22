@@ -14,8 +14,8 @@ add_compile_options(
     -Wfloat-equal
     -Wcast-qual
     -Wconversion
-    -Wzero-as-null-pointer-constant
-    -Wextra-semi
+    # -Wzero-as-null-pointer-constant
+    # -Wextra-semi
     -Wsign-conversion
 )
 

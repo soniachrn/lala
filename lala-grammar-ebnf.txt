@@ -23,43 +23,30 @@ include          = INCLUDE, ID, {DOT, ID} ;
 declaration   = variable
               | function
               | structure
-              | enum
               | statement
               ;
-variable      = (VAR | CONST), typed id, EQUAL, expression ;
+variable      = VAR, typed id, EQUAL, expression ;
 function      = FUNCTION, ID, parameters, type spec, statement ;
 parameters    = LPAREN, [variable, {COMMA, variable}, [COMMA]], RPAREN ;
 structure     = STRUCTURE, ID, LBRACE, {typed id}, RBRACE ;
-enum          = ENUM, ID, LBRACE, {ID}, RBRACE;
 typed id      = ID, type spec ;
 
 
 (* Statement *)
 statement     = print
-              | assert
               | assignment
               | if
               | while
               | do while
               | for
               | function call
-              | CONTINUE
-              | BREAK
               | return
               | block
               ;
 print         = PRINT, expression ;
-assert        = ASSERT, expression ;
-assignment    = postfix, assign op, expression ;  (* Compiler should force this postfix to end with one of: primary, subscript, member access *)
-assign op     = EQUAL
-              | PLUS EQUAL
-              | MINUS EQUAL
-              | STAR EQUAL
-              | SLASH EQUAL
-              | PERCENT EQUAL
-              ;
+assignment    = postfix, EQUAL, expression ;  (* Compiler should force this postfix to end with one of: primary, subscript, member access *)
 if            = IF, expression, statement, [else] ;
-else          = ELSE statement ;
+else          = ELSE, statement ;
 while         = WHILE, expression, statement ;
 do while      = DO, statement, WHILE, expression ;
 for           = FOR, ID, IN, expression, statement ;
@@ -96,8 +83,7 @@ postfix op    = DOT, ID  (* member access *)
               | LBRACKET, expression, RBRACKET  (* subscript *)
               | type cast
               ;
-call          = LPAREN, [argument, {COMMA, argument}, [COMMA]], RPAREN ;
-argument      = [ID, EQUAL], expression ;
+call          = LPAREN, [expression, {COMMA, expression}, [COMMA]], RPAREN ;
 primary       = TRUE
               | FALSE
               | INTEGER VALUE
@@ -105,12 +91,9 @@ primary       = TRUE
               | STRING VALUE
               | ID
               | array
-              | map
               | LPAREN expression RPAREN
               ;
 array         = LBRACKET, [expression, {COMMA, expression}, [COMMA]], RBRACKET ;
-map           = LBRACE, [map item, {COMMA, map item}, [COMMA]], RBRACE ;
-map item      = expression, COLON, expression ;
 
 
 (* Type *)
@@ -119,8 +102,7 @@ type cast     = COLON, castable type ;
 type          = castable type
               | BOOL
               | ID
-              | LBRACKET type RBRACKET
-              | LBRACE type COLON type RBRACE
+              | LBRACKET, type, RBRACKET
               ;
 castable type = INT
               | FLOAT
@@ -159,10 +141,7 @@ STAR              = "*" ;
 STAR EQUAL        = "*=" ;
 
 AND               = "and" ;
-ASSERT            = "assert" ;
 BOOL              = "bool" ;
-BREAK             = "break" ;
-CONTINUE          = "continue" ;
 ELSE              = "else" ;
 ENUM              = "enum" ;
 FALSE             = "false" ;

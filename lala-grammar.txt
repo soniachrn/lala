@@ -2,41 +2,6 @@ grammar: Lala
 version: 0.0.2
 
 
-# TODO: forward declarations
-
-# Types:
-#
-#   null     - ? - see no reason to have it
-#   optional - ? - yes
-#   function - ?
-#
-#   bool            false
-#   int             0
-#   uint            0
-#   float           0
-#   string          ''
-#   array           []
-#   map             {}
-#   function
-#   user-defined    ...
-#   user-defined?   no-value
-
-# Needed type casts:
-#   uint <———> int <———> float
-#   any type <———> string
-#   user-defined <———> user-defined?
-
-# Operators
-#   or and       b-b
-#   == !=        any matching type
-#   >= <= > <    i-i   f-f   s-s
-#   +            i-i   f-f   s-s
-#   -            i-i   f-f
-#   * /          i-i   f-f
-#   %            i-i   f-i
-#
-
-
 # Parser
 
 program         : global-statement* ;
@@ -50,15 +15,12 @@ include         : IMPORT ID (DOT ID)* ;
 declaration     : variable
                 | function
                 | structure
-                | enum
                 | statement
                 ;
-variable        : VAR? typed-id init? ;         # Bad here
-init            : EQUAL expression ;
+variable        : VAR typed-id init EQUAL expression ;
 function        : FUNCTION ID parameters type-spec statement ;
 parameters      : LPAREN (variable (COMMA variable)* COMMA?)? RPAREN ;
 structure       : STRUCTURE ID LBRACE member* RBRACE ;
-enum            : ENUM 
 member          : predicate
                 | typed-id
                 ;
@@ -67,28 +29,17 @@ typed-id        : ID type-spec ;
 
 # Statement
 statement       : print
-                | assert
                 | assignment
                 | if
                 | while
                 | do-while
                 | for
                 | function-call
-                | CONTINUE
-                | BREAK
                 | return
                 | block
                 ;
 print           : PRINT expression ;
-assert          : ASSERT expression ;
-assignment      : postfix assign-op expression ;  # Compiler should force this postfix to end with one of: primary, subscript, member access
-assign-op       : EQUAL
-                | PLUS-EQUAL
-                | MINUS-EQUAL
-                | STAR-EQUAL
-                | SLASH-EQUAL
-                | PERCENT-EQUAL
-                ;
+assignment      : postfix EQUAL expression ;  # Compiler should force this postfix to end with one of: primary, subscript, member access
 if              : IF expression statement else? ;
 else            : ELSE statement ;
 while           : WHILE expression statement ;
@@ -126,8 +77,7 @@ postfixop       : DOT ID
                 | LBRACKET expression RBRACKET
                 | type-cast
                 ;
-call            : LPAREN (argument (COMMA argument)* COMMA?)? RPAREN ;
-argument        : (ID EQUAL)? expression ;
+call            : LPAREN (expression (COMMA expression)* COMMA?)? RPAREN ;
 primary         : TRUE
                 | FALSE
                 | INTEGER_VALUE
@@ -135,12 +85,9 @@ primary         : TRUE
                 | STRING_VALUE
                 | ID
                 | array
-                | map
                 | LPAREN expression RPAREN
                 ;
 array           : LBRACKET (expression (COMMA expression)* COMMA?)? RBRACKET ;
-map             : LBRACE (mapitem (COMMA mapitem)* COMMA?)? RBRACE;
-mapitem         : expression COLON expression ;
 
 # Utility
 type-spec       : COLON type ;
@@ -150,7 +97,6 @@ immutable-type  : castable-type
                 | BOOL
                 | ID
                 | LBRACKET type RBRACKET
-                | LBRACE type COLON type RBRACE
                 ;
 castable-type   : INT
                 | FLOAT
@@ -189,10 +135,7 @@ STAR            : * ;
 STAR-EQUAL      : *= ;
 
 AND             : and ;
-ASSERT          : assert ;
 BOOL            : bool ;
-BREAK           : break ;
-CONTINUE        : continue ;
 ELSE            : else ;
 ENUM            : enum ;
 FALSE           : false ;
