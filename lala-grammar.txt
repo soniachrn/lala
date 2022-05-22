@@ -33,7 +33,6 @@ statement       : print
                 | if
                 | while
                 | do-while
-                | for
                 | function-call
                 | return
                 | block
@@ -44,7 +43,6 @@ if              : IF expression statement else? ;
 else            : ELSE statement ;
 while           : WHILE expression statement ;
 do-while        : DO statement WHILE expression ;
-for             : FOR ID IN expression statement ;
 function-call   : postfix ;                                 # Compiler should force this postfix to end with a call.
 return          : RETURN expression? ;
 block           : LBRACE declaration RBRACE ;
