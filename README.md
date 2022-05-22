@@ -2,26 +2,72 @@
 
 Lala — процедурно-ориентированный, статически типизированный, байткод-компилируемый язык программирования с автоматической сборкой мусора.
 
-- [Комментарии](#comments)
-- [Переменные](#variables)
-- [Система типов](#type-system)
-  - [Базовые типы](#base-types)
-  - [Массивы](#arrays)
-  - [Словари](#maps)
-  - [Структуры](#structures)
-- [Операторы](#operators)
-- [Поток управления](#control-flow)
-  - [Условный оператор](#if)
-  - [Циклы](#loops)
-    - [While](#while)
-    - [Do-while](#do-while)
-    - [For-in](#for-in)
-    - [Continue, break](#continue-break)
-  - [Функции](#functions)
+- [Установка](#installation)
+- [Использование](#usage)
+  - [Компиляция](#compilation)
+  - [Исполнение](#execution)
+- [Язык](#language)
+  - [Комментарии](#comments)
+  - [Переменные](#variables)
+  - [Система типов](#type-system)
+    - [Базовые типы](#base-types)
+    - [Массивы](#arrays)
+    - [Структуры](#structures)
+  - [Операторы](#operators)
+  - [Поток управления](#control-flow)
+    - [Условный оператор](#if)
+    - [Циклы](#loops)
+      - [While](#while)
+      - [Do-while](#do-while)
+    - [Функции](#functions)
+  - [Примеры](#examples)
+
+<a name="installation"/>
+
+## Установка
+
+1. Скачать репозиторий
+```
+git clone https://github.com/soniachrn/lala.git lala
+```
+
+2. Собрать lala
+```
+cmake -S lala -B lala/build && make -C lala/build lala
+```
+
+3. Создать алиас в `.zshrc` или в `.bashrc`
+```
+echo "alias lala='<cwd>/lala/build/lala'" >> <~/.zshrc или ~/.bashrc>
+```
+
+<a name="usage"/>
+
+## Использование
+
+<a name="compilation"/>
+
+### Компиляция
+
+```
+lala compile <файл исходного кода lala> <результирующий файл байткода lalaby>
+```
+
+<a name="execution"/>
+
+### Исполнение
+
+```
+lala execute <файл байткода lalaby>
+```
+
+<a name="language"/>
+
+## Язык
 
 <a name="comments"/>
 
-## Комментарии
+### Комментарии
 
 Однострочный комментарий начинается с `|`.
 
@@ -47,46 +93,44 @@ Multiline comment
 
 <a name="variables"/>
 
-## Переменные
+### Переменные
 
 Переменные определяются при помощи следующего синтаксиса:
 ```
-(const|var) <name>: <type> (= <expression>)?
+var <name>: <type> (= <expression>)
 ```
-
-Доступны следующие операции-присваивания: `=`, `+=`, `-=`, `*=`, `/=`, `%=`
 
 Например:
 ```
-const i: int
+var i: int    = 9
 var   f: float  = 0.76
-const s: string = 'Hello, world!'
+var s: string = 'Hello, world!'
 
-f = 0.65          | OK
-i = 1             | Error (i is const)
+f = 0.65
+i = 1
 
-f += 1.0
+f = f + 1.0
 ```
 
 
 <a name="type-system"/>
 
-## Система типов
+### Система типов
 
 <a name="base-types"/>
 
-### Базовые типы
+#### Базовые типы
 
-| Тип            | Пример               | Значение по умолчанию |
-| -------------- | -------------------- | --------------------- |
-| `bool`         | `true`, `false`      | `false`               |
-| `int`          | `12`, `0`, `-7`      | `0`                   |
-| `float`        | `9.834`, `-0.76`     | `0.0`                 |
-| `string`       | `'Hello, world!'`    | `''`                  |
+| Тип            | Пример               |
+| -------------- | -------------------- |
+| `bool`         | `true`, `false`      |
+| `int`          | `12`, `0`, `-7`      |
+| `float`        | `9.834`, `-0.76`     |
+| `string`       | `'Hello, world!'`    |
 
 <a name="arrays"/>
 
-### Массивы
+#### Массивы
 
 Массив позволяет хранить последовательность элементов одного типа.
 
@@ -95,57 +139,29 @@ var array: [string] = [ 'Hello,', 'world!' ]
 
 print(array[0] + ' ' + array[1])
 | 'Hello, world!'
-
-append(array, 'My name is Sonia')
-print(array)
-| ['Hello,', 'world!', 'My name is Sonia']
-```
-
-<a name="maps"/>
-
-### Словари
-
-Словари позволяют хранить набор пар ключ-значение и предоставляет доступ к значениям по ключам.
-
-```
-var map: {string: int} = {
-  'apples':  10,
-  'pears':    2,
-  'tomatos':  8,
-}
-map['cucumbers'] = 1
-
-print(map['pears'])
-| 2
-
-print(map)
-| {'apples': 10, 'pears': 2, 'tomatos': 8, 'cucumbers': 1}
 ```
 
 <a name="structures"/>
 
-### Структуры
+#### Структуры
 
 Пользователь может определять другие типы на основе базовых при помощи структур.
 
 ```
 structure Person {
-  age: int,
-  name: string,
+  age: int
+  name: string
 }
 
-const person: Person(age=20, name='Sonia')
+const person: Person(20, 'Sonia')
 
 print(person.name)
 | 'Sonia'
-
-print(person)
-| Person(age=20, name='Sonia')
 ```
 
 <a name="operators"/>
 
-## Операторы
+### Операторы
 
 | Приоритет     | Оператор  | Название         | Типы операндов                      |
 | ------------- | --------- | ---------------- | ----------------------------------- |
@@ -157,7 +173,7 @@ print(person)
 |               | `!a`      | negation         | bool                                |
 | 3. factor     | `a * b`   | multiplication   | int-int, float-float                |
 |               | `a / b`   | division         | int-int, float-float                |
-|               | `a % b`   | modulo           | int-int, float-int                  |
+|               | `a % b`   | modulo           | int-int                             |
 | 4. term       | `a + b`   | addition         | int-int, float-float                |
 |               | `a + b`   | concatenation    | string-string                       |
 |               | `a - b`   | subtraction      | int-int, float-float                |
@@ -174,11 +190,11 @@ print(person)
 
 <a name="control-flow"/>
 
-## Поток управления
+### Поток управления
 
 <a name="if"/>
 
-### Условный оператор
+#### Условный оператор
 
 ```
 const a: int = -3
@@ -194,16 +210,16 @@ if (a > 0) {
 
 <a name="loops"/>
 
-### Циклы
+#### Циклы
 
 <a name="while"/>
 
-#### While
+##### While
 
 ```
-var i: 0
+var i: int = 0
 while (i < 5) {
-  i += 1
+  i = i + 1
   print(i)
 }
 | 1 2 3 4 5
@@ -211,43 +227,32 @@ while (i < 5) {
 
 <a name="do-while"/>
 
-#### Do-while
+##### Do-while
 
 ```
-var i: 0
+var i: int = 0
 do {
-  i += 1
+  i = i + 1
   print(i)
 } while (i < 5)
 | 1 2 3 4 5
 ```
 
-<a name="for-in"/>
-
-#### For-in
-
-```
-for (str in ['a', 'b', 'c']) {
-  print(str)
-}
-| a b c
-```
-
-<a name="continue-break"/>
-
-#### continue, break
-
-`continue` переходит к следующей итерации цикла, `break` выходит из цикла
-
 <a name="functions"/>
 
-## Функции
+### Функции
 
 ```
-function sum(const a:int, const b: int): int {
+function sum(var a: int, var b: int): int {
   return a + b
 }
 
 print(sum(12, 3))
 | 15
 ```
+
+<a name="examples"/>
+
+### Примеры
+
+В папке [example](example)
