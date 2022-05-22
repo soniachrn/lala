@@ -5,25 +5,25 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED true)
 
 add_compile_options(
-    -g
+    #-g
 
-    -Werror
+    #-Werror
 
-    -Wall
-    -Wextra
-    -Wpedantic
+    #-Wall
+    #-Wextra
+    #-Wpedantic
 
-    -Wfloat-equal
-    -Wcast-qual
-    -Wconversion
-    #-Wzero-as-null-pointer-constant
-    #-Wextra-semi
-    -Wsign-conversion
+    #-Wfloat-equal
+    #-Wcast-qual
+    #-Wconversion
+    ##-Wzero-as-null-pointer-constant
+    ##-Wextra-semi
+    #-Wsign-conversion
 
-    -Wno-gnu-statement-expression
-    -Wno-gnu-folding-constant
+    #-Wno-gnu-statement-expression
+    #-Wno-gnu-folding-constant
 
-    -fshort-enums
+    #-fshort-enums
 )
 
 add_subdirectory(lib/cut)
