@@ -19,6 +19,8 @@ add_compile_options(
     -Wconversion
     -Wsign-conversion
 
+    -Wno-gnu-folding-constant
+
     -fshort-enums
 )
 

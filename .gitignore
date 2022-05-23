@@ -1,4 +1,6 @@
 build
+build-all.bash
+build-apple-clang.bash
 build-clang.bash
 build-gcc.bash
 *.lalaby

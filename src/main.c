@@ -45,8 +45,6 @@ static void deserializeLalabyHeader(
     LalabyHeader* header
 );
 
-// static char* readFile(const char* filename);
-
 static void help(LalaArguments arguments);
 static void compile(LalaArguments arguments);
 static void execute(LalaArguments arguments);
@@ -181,35 +179,6 @@ static LalaArguments parseArguments(int argc, const char* argv[]) {
 
     return arguments;
 }
-
-// static char* readFile(const char* filename) {
-//     FILE* file = fopen(filename, "rb");
-//     if (file == NULL) {
-//         fprintf(stderr, "Couldn't open file '%s'.\n", filename);
-//         exit(1);
-//     }
-// 
-//     fseek(file, 0L, SEEK_END);
-//     size_t file_size = (size_t)ftell(file);
-//     rewind(file);
-// 
-//     char* buffer = (char*)malloc(file_size + 1);
-//     if (buffer == NULL) {
-//         fprintf(stderr, "Couldn't allocate memory for file '%s'.\n", filename);
-//         exit(1);
-//     }
-// 
-//     size_t bytes_read = fread(buffer, sizeof(char), file_size, file);
-//     if (bytes_read < file_size) {
-//         fprintf(stderr, "Couldn't read file '%s'.\n", filename);
-//         exit(1);
-//     }
-// 
-//     buffer[bytes_read] = '\0';
-// 
-//     fclose(file);
-//     return buffer;
-// }
 
 static void fillLalabyHeader(LalabyHeader* header, const Parser* parser) {
     assert(header);
