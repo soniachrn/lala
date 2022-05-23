@@ -228,27 +228,6 @@ bool accessVariableInScope(
     return found;
 }
 
-// bool accessVariableInScope(
-//     const Scope* scope,
-//     const char* name,
-//     size_t name_length,
-//     Variable* variable
-// ) {
-//     ASSERT_SCOPE(scope);
-// 
-//     size_t variable_index;
-//     bool found = false;
-//     for (const Scope* i = scope; !found && i != NULL; i = i->parent) {
-//         found = getFromHashMap(&i->symbol_table, name, name_length, &variable_index);
-//         if (found) {
-//             *variable = i->variables[variable_index];
-//         }
-//     }
-// 
-//     ASSERT_SCOPE(scope);
-//     return found;
-// }
-
 ValueType* getReturnType(const Scope* scope) {
     ASSERT_SCOPE(scope);
 
