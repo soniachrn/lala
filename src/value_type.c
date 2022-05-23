@@ -194,19 +194,19 @@ const char* valueTypeName(ValueType* value_type) {
         case BASIC_VALUE_TYPE_STRING:
             return basicValueTypeName(value_type->basic_type);
 
-#define INIT_VALUE_TYPE_NAME_IF_NEEDED(...)                           \
-    if (!value_type->name) {                                          \
-        int buffer_size = 128;                                        \
-        value_type->name = calloc((size_t)buffer_size, sizeof(char));         \
-        int length = snprintf(                                        \
-            value_type->name,                                         \
-            buffer_size,                                              \
-            __VA_ARGS__                                               \
-        ) + 1;                                                        \
-        value_type->name = realloc(value_type->name, (size_t)length); \
-        if (length > buffer_size) {                                   \
-            snprintf(value_type->name, length, __VA_ARGS__);          \
-        }                                                             \
+#define INIT_VALUE_TYPE_NAME_IF_NEEDED(...)                   \
+    if (!value_type->name) {                                  \
+        size_t buffer_size = 128;                             \
+        value_type->name = calloc(buffer_size, sizeof(char)); \
+        size_t length = (size_t)snprintf(                     \
+            value_type->name,                                 \
+            buffer_size,                                      \
+            __VA_ARGS__                                       \
+        ) + 1;                                                \
+        value_type->name = realloc(value_type->name, length); \
+        if (length > buffer_size) {                           \
+            snprintf(value_type->name, length, __VA_ARGS__);  \
+        }                                                     \
     }
 
         case BASIC_VALUE_TYPE_ARRAY:
@@ -227,6 +227,10 @@ const char* valueTypeName(ValueType* value_type) {
 #undef INIT_VALUE_TYPE_NAME
 
         case BASIC_VALUE_TYPE_FUNCTION:
+// open_memstream isn't supported on windows.
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+            return basicValueTypeName(value_type->basic_type);
+#else
             if (!value_type->name) {
                 FunctionValueType function = value_type->as.function;
 
@@ -254,6 +258,7 @@ const char* valueTypeName(ValueType* value_type) {
                 fclose(stream);
             }
             return value_type->name;
+#endif
 
         case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
         case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:

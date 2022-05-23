@@ -1,2 +1,5 @@
 build
+build-clang.bash
+build-gcc.bash
 *.lalaby
+

@@ -222,28 +222,30 @@ void interpret(VM* vm) {
     }
 
 #define POP_BYTE()                                      \
-    ({                                                  \
+    /* __extension__ suppresses the warning 'ISO C      \
+     * forbids braced-groups within expressions' */     \
+    __extension__ ({                                    \
         uint8_t value = popByteFromStack(&vm->stack);   \
         CLEAN_STACK_REFERENCES();                       \
         value;                                          \
     })
 
 #define POP_INT()                                       \
-    ({                                                  \
+    __extension__ ({                                    \
         int32_t value = popIntFromStack(&vm->stack);    \
         CLEAN_STACK_REFERENCES();                       \
         value;                                          \
     })
 
 #define POP_FLOAT()                                     \
-    ({                                                  \
+    __extension__ ({                                    \
         double value = popFloatFromStack(&vm->stack);   \
         CLEAN_STACK_REFERENCES();                       \
         value;                                          \
     })
 
 #define POP_ADDRESS()                                   \
-    ({                                                  \
+    __extension__ ({                                    \
         size_t value = popAddressFromStack(&vm->stack); \
         CLEAN_STACK_REFERENCES();                       \
         value;                                          \

@@ -244,13 +244,16 @@ ParseFileResult parseFile(Parser* parser, const char* file_path) {
     
     // Get the include state of the file.
     size_t file_path_length = strlen(file_path);
-    IncludeState include_state = INCLUDE_NOT_STARTED;
+    // Avoid 'converting a packed pointer to a size_t pointer may
+    // result in an unaligned pointer value' warning
+    size_t include_state_size_t = (size_t)INCLUDE_NOT_STARTED;
     getFromHashMap(
         &parser->includes,
         file_path,
         file_path_length,
-        (size_t*)&include_state
+        &include_state_size_t
     );
+    IncludeState include_state = (IncludeState)include_state_size_t;
 
     // If inclusion is in process already, a recursive inclusion
     // occurred, which results in a compile error.
@@ -394,7 +397,7 @@ ValueType* parseExpression(Parser* parser) {
                     );                                          \
                 }                                               \
             } else {                                            \
-                highlight_length = (                            \
+                highlight_length = (uint8_t)(                   \
                     line_length -                               \
                     (start_token.symbol - 1)                    \
                 );                                              \
