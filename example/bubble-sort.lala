@@ -1,0 +1,46 @@
+
+function int-array-to-string(var array: [int], var length: int): string {
+    var str: string = '['
+    
+    var i: int = 0
+    while i < length {
+        str = str + array[i]: string
+        if i < length - 1
+            str = str + ' '
+        i = i + 1
+    }
+
+    str = str + ']'
+
+    return str
+}
+
+function bubble-sort-int-array(var array: [int], var length: int): void {
+    var n: int = length
+
+    var did-swap: bool = true
+    while did-swap {
+        did-swap = false
+
+        var i: int = 1
+        while i < n {
+            if array[i - 1] > array[i] {
+                var temp: int = array[i - 1]
+                array[i - 1] = array[i]
+                array[i] = temp
+                did-swap = true
+            }
+            i = i + 1
+        }
+        n = n - 1
+    }
+}
+
+
+var array: [int] = [4, 2, 7, 8, 2, 3]
+var length: int  = 6
+
+print 'Before sort: ' + int-array-to-string(array, length)
+bubble-sort-int-array(array, length)
+print 'After  sort: ' + int-array-to-string(array, length)
+
