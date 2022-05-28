@@ -123,10 +123,12 @@ bool   isReferenceValueType(ValueType* value_type);
 bool   isStructureValueType(ValueType* value_type);
 bool   valueTypesEqual(ValueType* a, ValueType* b);
 
-OpCode getOpPopForValueType(ValueType* value_type);
-OpCode getOpReturnForValueType(ValueType* value_type);
-OpCode getOpGetFromHeapForValueType(ValueType* value_type);
-OpCode getOpSetOnHeapForValueType(ValueType* value_type);
+OpCode getOpPopForValueType         (ValueType* value_type);
+OpCode getOpReturnForValueType      (ValueType* value_type);
+OpCode getOpGetFromHeapForValueType (ValueType* value_type);
+OpCode getOpSetOnHeapForValueType   (ValueType* value_type);
+OpCode getOpSubscriptGetForValueType(ValueType* value_type);
+OpCode getOpSubscriptSetForValueType(ValueType* value_type);
 
 
 #endif

@@ -642,28 +642,50 @@ void interpret(VM* vm) {
 
 #undef RETURN_OP
 
-#define SUBSCRIPT_OP(type, push)                                 \
+#define SUBSCRIPT_GET_OP(type, push)                             \
     {                                                            \
         int32_t index = POP_INT();                               \
         if (index < 0) {                                         \
-            fprintf(stderr, "negative array index\n");           \
-            exit(1);                                             \
+            error(vm, "Negative array index.");                  \
+            break;                                               \
         }                                                        \
         Object* array_object = (Object*)POP_ADDRESS();           \
         if ((size_t)index + sizeof(type) > array_object->size) { \
-            fprintf(stderr, "array out of bounds\n");            \
-            exit(1);                                             \
+            error(vm, "Array index out of bounds.");             \
+            break;                                               \
         }                                                        \
         push(((type*)array_object->value)[index]);               \
     }
 
-            // Array
-            case OP_SUBSCRIPT_BYTE:    SUBSCRIPT_OP(uint8_t, PUSH_BYTE);        break;
-            case OP_SUBSCRIPT_INT:     SUBSCRIPT_OP(int32_t, PUSH_INT);         break;
-            case OP_SUBSCRIPT_FLOAT:   SUBSCRIPT_OP(double,  PUSH_FLOAT);       break;
-            case OP_SUBSCRIPT_ADDRESS: SUBSCRIPT_OP(size_t,  PUSH_REF_ADDRESS); break;
+#define SUBSCRIPT_SET_OP(type, pop)                              \
+    {                                                            \
+        type value = pop();                                      \
+        int32_t index = POP_INT();                               \
+        if (index < 0) {                                         \
+            error(vm, "Negative array index.");                  \
+            break;                                               \
+        }                                                        \
+        Object* array_object = (Object*)POP_ADDRESS();           \
+        if ((size_t)index + sizeof(type) > array_object->size) { \
+            error(vm, "Array index out of bounds.");             \
+            break;                                               \
+        }                                                        \
+        ((type*)array_object->value)[index] = value;             \
+    }
 
-#undef SUBSCRIPT_OP
+            // Array
+            case OP_SUBSCRIPT_GET_BYTE:    SUBSCRIPT_GET_OP(uint8_t, PUSH_BYTE);        break;
+            case OP_SUBSCRIPT_GET_INT:     SUBSCRIPT_GET_OP(int32_t, PUSH_INT);         break;
+            case OP_SUBSCRIPT_GET_FLOAT:   SUBSCRIPT_GET_OP(double,  PUSH_FLOAT);       break;
+            case OP_SUBSCRIPT_GET_ADDRESS: SUBSCRIPT_GET_OP(size_t,  PUSH_REF_ADDRESS); break;
+
+            case OP_SUBSCRIPT_SET_BYTE:    SUBSCRIPT_SET_OP(uint8_t, POP_BYTE);        break;
+            case OP_SUBSCRIPT_SET_INT:     SUBSCRIPT_SET_OP(int32_t, POP_INT);         break;
+            case OP_SUBSCRIPT_SET_FLOAT:   SUBSCRIPT_SET_OP(double,  POP_FLOAT);       break;
+            case OP_SUBSCRIPT_SET_ADDRESS: SUBSCRIPT_SET_OP(size_t,  POP_ADDRESS); break;
+
+#undef SUBSCRIPT_SET_OP
+#undef SUBSCRIPT_GET_OP
 
             default: error(vm, "Invalid instruction."); break;
         }

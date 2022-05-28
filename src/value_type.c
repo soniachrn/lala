@@ -475,3 +475,45 @@ OpCode getOpSetOnHeapForValueType(ValueType* value_type) {
     }
 }
 
+OpCode getOpSubscriptGetForValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:  return OP_SUBSCRIPT_GET_BYTE;
+        case BASIC_VALUE_TYPE_INT:   return OP_SUBSCRIPT_GET_INT;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_SUBSCRIPT_GET_FLOAT;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_OBJECT:
+            return OP_SUBSCRIPT_GET_ADDRESS;
+
+        case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        default:
+            assert(false);
+    }
+}
+
+OpCode getOpSubscriptSetForValueType(ValueType* value_type) {
+    switch (value_type->basic_type) {
+        case BASIC_VALUE_TYPE_BOOL:  return OP_SUBSCRIPT_SET_BYTE;
+        case BASIC_VALUE_TYPE_INT:   return OP_SUBSCRIPT_SET_INT;
+        case BASIC_VALUE_TYPE_FLOAT: return OP_SUBSCRIPT_SET_FLOAT;
+
+        case BASIC_VALUE_TYPE_STRING:
+        case BASIC_VALUE_TYPE_ARRAY:
+        case BASIC_VALUE_TYPE_MAP:
+        case BASIC_VALUE_TYPE_FUNCTION:
+        case BASIC_VALUE_TYPE_OBJECT:
+            return OP_SUBSCRIPT_SET_ADDRESS;
+
+        case BASIC_VALUE_TYPE_VOID:
+        case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
+        case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
+        default:
+            assert(false);
+    }
+}
+

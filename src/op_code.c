@@ -113,10 +113,15 @@ const char* opCodeName(OpCode op_code) {
         case OP_RETURN_ADDRESS:          return "return address";
 
         // Array
-        case OP_SUBSCRIPT_BYTE:          return "subscript byte";
-        case OP_SUBSCRIPT_INT:           return "subscript int";
-        case OP_SUBSCRIPT_FLOAT:         return "subscript float";
-        case OP_SUBSCRIPT_ADDRESS:       return "subscript address";
+        case OP_SUBSCRIPT_GET_BYTE:      return "subscript get byte";
+        case OP_SUBSCRIPT_GET_INT:       return "subscript get int";
+        case OP_SUBSCRIPT_GET_FLOAT:     return "subscript get float";
+        case OP_SUBSCRIPT_GET_ADDRESS:   return "subscript get address";
+
+        case OP_SUBSCRIPT_SET_BYTE:      return "subscript set byte";
+        case OP_SUBSCRIPT_SET_INT:       return "subscript set int";
+        case OP_SUBSCRIPT_SET_FLOAT:     return "subscript set float";
+        case OP_SUBSCRIPT_SET_ADDRESS:   return "subscript set address";
 
         default:                         return "INVALID";
     }

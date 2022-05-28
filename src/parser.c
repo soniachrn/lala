@@ -1691,15 +1691,38 @@ static ValueType* parsePostfix(Parser* parser, ExpressionKind expression_kind) {
                     return &VALUE_TYPE_INVALID;
                 }
 
-                // Subscript op.
-                emitOpCodesForTokenAndValueTypesCombination(
-                    parser,
-                    1,
-                    TOKEN_LBRACKET,
-                    value_type->as.array.element_type->basic_type
-                );
+                OpCode op_code = getOpSubscriptGetForValueType(value_type->as.array.element_type);
 
-                value_type = value_type->as.array.element_type;
+                // If it's an expression statement and this postfix is the last postfix in the lhs,
+                // parse the assignment.
+                if (expression_kind == EXPRESSION_STATEMENT && match(parser, TOKEN_EQUAL)) {
+                    // The assignment rhs.
+                    Token expression_start_token = next(parser);
+                    ValueType* expression_value_type = parseExpression(parser);
+
+                    // Make sure the array elements and value types match.
+                    if (!valueTypesEqual(value_type->as.array.element_type, expression_value_type)) {
+                        error(
+                            parser,
+                            "Semantic",
+                            expression_start_token,
+                            previous(parser),
+                            "Array element type (%s) and expression type (%s) don't match in an assignment.",
+                            valueTypeName(value_type->as.array.element_type),
+                            valueTypeName(expression_value_type)
+                        );
+                    }
+
+                    // Replace get opcode with set opcode.
+                    op_code = getOpSubscriptSetForValueType(value_type->as.array.element_type);
+                    value_type = NULL;
+                } else {
+                    value_type = value_type->as.array.element_type;
+                }
+
+                // Get or set the array element.
+                pushOpCodeOnStack(parser->chunk, op_code);
+
                 break;
             }
 
@@ -2234,14 +2257,6 @@ OpCode token_and_value_type_to_opcodes[][2] = {
     [KEY(1, TOKEN_EXCLAMATION,        BASIC_VALUE_TYPE_BOOL)  ] = { OP_NEGATE_BOOL,       OP_EMPTY       },
     [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_INT)   ] = { OP_NEGATE_INT,        OP_EMPTY       },
     [KEY(1, TOKEN_MINUS,              BASIC_VALUE_TYPE_FLOAT) ] = { OP_NEGATE_FLOAT,      OP_EMPTY       },
-
-    // Subscript
-    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_BOOL)  ] = { OP_SUBSCRIPT_BYTE,    OP_EMPTY       },
-    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_INT)   ] = { OP_SUBSCRIPT_INT,     OP_EMPTY       },
-    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_FLOAT) ] = { OP_SUBSCRIPT_FLOAT,   OP_EMPTY       },
-    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_STRING)] = { OP_SUBSCRIPT_ADDRESS, OP_EMPTY       },
-    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_ARRAY) ] = { OP_SUBSCRIPT_ADDRESS, OP_EMPTY       },
-    [KEY(1, TOKEN_LBRACKET,           BASIC_VALUE_TYPE_MAP)   ] = { OP_SUBSCRIPT_ADDRESS, OP_EMPTY       },
 };
 
 static void emitOpCodesForTokenAndValueTypesCombination(
