@@ -400,7 +400,6 @@ void interpret(VM* vm) {
             case OP_MULTIPLY_INT:   PUSH_INT(  POP_INT()   * POP_INT());   break;
             case OP_MULTIPLY_FLOAT: PUSH_FLOAT(POP_FLOAT() * POP_FLOAT()); break;
 
-            // TODO: make sure r isn't 0
             case OP_DIVIDE_INT: {
                 int32_t r = POP_INT();
                 int32_t l = POP_INT();
@@ -446,9 +445,9 @@ void interpret(VM* vm) {
             case OP_CONCATENATE: {
                 Object* r_address = (Object*)POP_ADDRESS();
                 Object* l_address = (Object*)POP_ADDRESS();
-                // Mark operands in order for them to not be deleted by gc before concatenation result allocation.
-                r_address->marked = true;
-                l_address->marked = true;
+
+                dontCollectObjectOnNextGC(r_address);
+                dontCollectObjectOnNextGC(l_address);
 
                 Object* object = allocateEmptyObject(
                     &vm->heap,

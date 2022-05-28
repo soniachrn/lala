@@ -40,7 +40,8 @@ typedef struct {
 
     CallFrame* call_frame;
 
-    // Contains stack positions for all reference values on the stack.
+    // Contains stack positions for all reference 
+    // values on the stack.
     Stack stack_references_positions;
 } VM;
 
@@ -49,7 +50,12 @@ typedef struct {
 // │ Function declarations │
 // └───────────────────────┘
 
-void initVM(VM* vm, uint8_t* source, size_t source_size, Constants* constants);
+void initVM(
+    VM* vm,
+    uint8_t* source,
+    size_t source_size,
+    Constants* constants
+);
 void freeVM(VM* vm);
 void dumpVM(const VM* vm);
 void fdumpVM(FILE* out, const VM* vm, int padding);

@@ -13,10 +13,16 @@
 // │ Macros │
 // └────────┘
 
-#define GC_INITIAL_THRESHOLD            0
-#define GC_THRESHOLD_HEAP_GROWTH_FACTOR 0
-
 // #define DEBUG_HEAP
+// #define STRESS_GC
+
+#ifdef STRESS_GC
+    #define GC_INITIAL_THRESHOLD            0
+    #define GC_THRESHOLD_HEAP_GROWTH_FACTOR 0
+#else
+    #define GC_INITIAL_THRESHOLD            (1024 * 1024)
+    #define GC_THRESHOLD_HEAP_GROWTH_FACTOR 2
+#endif
 
 
 // ┌───────┐
@@ -89,7 +95,12 @@ Object* allocateObjectFromValue(
     const uint8_t* value_source
 );
 
-void deallocateObject(Heap* heap, Object* object);
+/* Prevents an object from being collected on the next gc.
+ * Is useful when an object that's already popped from stack
+ * (this isn't marked as root) isn't used yet. Look at 
+ * OP_CONCATENATE in VM for example.
+ * */
+void dontCollectObjectOnNextGC(Object* object);
 
 
 #endif

@@ -63,6 +63,7 @@ static void collectGarbage(
 );
 
 static void markObject(Object* object);
+static void deallocateObject(Heap* heap, Object* object);
 
 
 // ┌──────────────────────────┐
@@ -258,17 +259,12 @@ Object* allocateObjectFromValue(
     return object;
 }
 
-void deallocateObject(Heap* heap, Object* object) {
-    assert(heap);
+void dontCollectObjectOnNextGC(Object* object) {
     ASSERT_OBJECT(object);
 
-#ifdef DEBUG_HEAP
-    printf("deallocate %p\n", (void*)object);
-#endif
+    object->marked = true;
 
-    heap->size -= sizeof(Object) + object->size;
-    free(object->value);
-    free(object);
+    ASSERT_OBJECT(object);
 }
 
 
@@ -376,5 +372,18 @@ static void markObject(Object* object) {
         default:
             assert(false);
     }
+}
+
+static void deallocateObject(Heap* heap, Object* object) {
+    assert(heap);
+    ASSERT_OBJECT(object);
+
+#ifdef DEBUG_HEAP
+    printf("deallocate %p\n", (void*)object);
+#endif
+
+    heap->size -= sizeof(Object) + object->size;
+    free(object->value);
+    free(object);
 }
 
