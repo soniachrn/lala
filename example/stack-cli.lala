@@ -26,7 +26,6 @@ function main(): void {
                 print 'Cant pop: the stack is empty!'
             else
                 print pop-from-int-stack(stack)
-        
         } else if command == 'clear' {
             clear-int-stack(stack)
         } else if command == 'exit' or command == 'quit' {
