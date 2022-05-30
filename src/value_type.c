@@ -185,6 +185,8 @@ const char* basicValueTypeName(BasicValueType basic_value_type) {
 }
 
 const char* valueTypeName(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_INVALID:
         case BASIC_VALUE_TYPE_VOID:
@@ -272,6 +274,8 @@ const char* valueTypeName(ValueType* value_type) {
 }
 
 size_t valueTypeSize(ValueType* value_type) {
+    assert(value_type);
+    
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
             return 0;
@@ -295,6 +299,8 @@ size_t valueTypeSize(ValueType* value_type) {
 }
 
 bool isReferenceValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_BOOL:
         case BASIC_VALUE_TYPE_INT:
@@ -317,6 +323,8 @@ bool isReferenceValueType(ValueType* value_type) {
 }
 
 bool isStructureValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_PLAIN_STRUCTURE:
         case BASIC_VALUE_TYPE_REFERENCE_STRUCTURE:
@@ -343,9 +351,12 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
             return true;
 
         case BASIC_VALUE_TYPE_ARRAY:
-            return valueTypesEqual(
-                a->as.array.element_type,
-                b->as.array.element_type
+            return (
+                b->as.array.element_type == NULL || 
+                valueTypesEqual(
+                    a->as.array.element_type,
+                    b->as.array.element_type
+                )
             );
 
         case BASIC_VALUE_TYPE_MAP:
@@ -390,6 +401,8 @@ bool valueTypesEqual(ValueType* a, ValueType* b) {
 }
 
 OpCode getOpPopForValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_BOOL:  return OP_POP_BYTE;
         case BASIC_VALUE_TYPE_INT:   return OP_POP_INT;
@@ -413,6 +426,8 @@ OpCode getOpPopForValueType(ValueType* value_type) {
 }
 
 OpCode getOpReturnForValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_VOID:  return OP_RETURN_VOID;
         case BASIC_VALUE_TYPE_BOOL:  return OP_RETURN_BYTE;
@@ -434,6 +449,8 @@ OpCode getOpReturnForValueType(ValueType* value_type) {
 }
 
 OpCode getOpGetFromHeapForValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_BOOL:  return OP_GET_BYTE_FROM_HEAP;
         case BASIC_VALUE_TYPE_INT:   return OP_GET_INT_FROM_HEAP;
@@ -455,6 +472,8 @@ OpCode getOpGetFromHeapForValueType(ValueType* value_type) {
 }
 
 OpCode getOpSetOnHeapForValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_BOOL:  return OP_SET_BYTE_ON_HEAP;
         case BASIC_VALUE_TYPE_INT:   return OP_SET_INT_ON_HEAP;
@@ -476,6 +495,8 @@ OpCode getOpSetOnHeapForValueType(ValueType* value_type) {
 }
 
 OpCode getOpSubscriptGetForValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_BOOL:  return OP_SUBSCRIPT_GET_BYTE;
         case BASIC_VALUE_TYPE_INT:   return OP_SUBSCRIPT_GET_INT;
@@ -497,6 +518,8 @@ OpCode getOpSubscriptGetForValueType(ValueType* value_type) {
 }
 
 OpCode getOpSubscriptSetForValueType(ValueType* value_type) {
+    assert(value_type);
+
     switch (value_type->basic_type) {
         case BASIC_VALUE_TYPE_BOOL:  return OP_SUBSCRIPT_SET_BYTE;
         case BASIC_VALUE_TYPE_INT:   return OP_SUBSCRIPT_SET_INT;

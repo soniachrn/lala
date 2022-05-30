@@ -1437,8 +1437,29 @@ static ValueType* parseFactor(Parser* parser) {
         TokenType operator_token_type = previous(parser).type;
         ValueType* value_type_r = parsePrefix(parser);
 
-        validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l->basic_type, value_type_r->basic_type);
-        emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l->basic_type);
+        // Multiply array
+        if (
+            operator_token_type == TOKEN_STAR && 
+            value_type_l->basic_type == BASIC_VALUE_TYPE_ARRAY
+        ) {
+            if (value_type_r->basic_type != BASIC_VALUE_TYPE_INT) {
+                 error(
+                     parser,
+                     "Semantic",
+                     expression_start_token,
+                     previous(parser),
+                     "Can only multiply array by an int. Trying to multiply array by an %s.",
+                     valueTypeName(value_type_r)
+                 );
+            }
+            pushOpCodeOnStack(parser->chunk, OP_MULTIPLY_HEAP_VALUE);
+        }
+
+        // Other
+        else {
+            validateOperatorTypes(parser, expression_start_token, operator_token_type, value_type_l->basic_type, value_type_r->basic_type);
+            emitOpCodesForTokenAndValueTypesCombination(parser, 2, operator_token_type, value_type_l->basic_type);
+        }
     }
 
     ASSERT_PARSER(parser);
@@ -1665,6 +1686,14 @@ static ValueType* parsePostfix(Parser* parser, ExpressionKind expression_kind) {
                         "Semantic",
                         "Trying to subscript a %s. Only arrays may be subscripted.",
                         valueTypeName(value_type)
+                    );
+                    return &VALUE_TYPE_INVALID;
+                }
+                if (value_type->as.array.element_type == NULL) {
+                    errorAtPrevious(
+                        parser,
+                        "Semantic",
+                        "Can't subscript an empty array."
                     );
                     return &VALUE_TYPE_INVALID;
                 }
@@ -2048,7 +2077,7 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
             size_t elements_count = 0;
 
             // TODO: produce an error message in case of unterminated array; same with blocks
-            
+
             while (!match(parser, TOKEN_RBRACKET) && peekNext(parser) != TOKEN_END) {
                 Token expression_start_token = next(parser);
                 ValueType* current_element_type = parseExpression(parser);
@@ -2080,11 +2109,21 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
                 elements_count += 1;
             }
         
+            if (elements_count > 0) {
+                assert(element_type);
+            }
+
             pushOpCodeOnStack(parser->chunk, OP_DEFINE_ON_HEAP);
-            pushAddressOnStack(parser->chunk, elements_count * valueTypeSize(element_type));
+            pushAddressOnStack(
+                parser->chunk,
+                element_type ? elements_count * valueTypeSize(element_type) : 0
+            );
             pushByteOnStack(
                 parser->chunk,
-                isReferenceValueType(element_type) ? REFERENCE_RULE_REF_ARRAY : REFERENCE_RULE_PLAIN
+                element_type
+                    ? (isReferenceValueType(element_type) ? REFERENCE_RULE_REF_ARRAY : REFERENCE_RULE_PLAIN)
+                    : REFERENCE_RULE_PLAIN  // In case it's an empty array [], reference rule is set to plain.
+                                            // It might cause problems in future when arrays may be resized.
             );
 
             value_type = createArrayValueType(element_type);

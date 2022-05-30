@@ -38,6 +38,7 @@ struct ValueType;
 typedef struct ValueType ValueType;
 
 typedef struct {
+    // This can be NULL for a literal like [].
     ValueType* element_type;
 } ArrayValueType;
 

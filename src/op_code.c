@@ -55,6 +55,7 @@ const char* opCodeName(OpCode op_code) {
         case OP_ADD_FLOAT:               return "add float";
         case OP_MULTIPLY_INT:            return "multiply int";
         case OP_MULTIPLY_FLOAT:          return "multiply float";
+        case OP_MULTIPLY_HEAP_VALUE:     return "multiply heap value";
         case OP_DIVIDE_INT:              return "divide int";
         case OP_DIVIDE_FLOAT:            return "divide float";
         case OP_MODULO_INT:              return "modulo int";

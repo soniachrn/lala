@@ -399,6 +399,41 @@ void interpret(VM* vm) {
 
             case OP_MULTIPLY_INT:   PUSH_INT(  POP_INT()   * POP_INT());   break;
             case OP_MULTIPLY_FLOAT: PUSH_FLOAT(POP_FLOAT() * POP_FLOAT()); break;
+            case OP_MULTIPLY_HEAP_VALUE: {
+                int32_t times = POP_INT();
+                if (times < 0) {
+                    error(
+                        vm,
+                        "Trying to multiply a heap value by a negative integer %d.",
+                        times
+                    );
+                }
+                Object* source = (Object*)POP_ADDRESS();
+                dontCollectObjectOnNextGC(source);
+
+                if (source->custom_reference_rule != NULL) {
+                    error(
+                        vm,
+                        "Trying to multiply a heap value with a custom reference rule."
+                    );
+                }
+
+                Object* result = allocateEmptyObject(
+                    &vm->heap,
+                    &vm->stack,
+                    &vm->stack_references_positions,
+                    source->reference_rule,
+                    NULL,
+                    source->size * (size_t)times
+                );
+
+                for (size_t i = 0; i < (size_t)times; ++i) {
+                    memcpy(result->value + source->size * i, source->value, source->size);
+                }
+
+                PUSH_REF_ADDRESS((size_t)result);
+                break;
+            }
 
             case OP_DIVIDE_INT: {
                 int32_t r = POP_INT();
