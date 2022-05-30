@@ -381,17 +381,58 @@ void interpret(VM* vm) {
             case OP_EQUALS_BOOL:   PUSH_BYTE(POP_BYTE() == POP_BYTE()); break;
             case OP_EQUALS_INT:    PUSH_BYTE(POP_INT()  == POP_INT());  break;
             case OP_EQUALS_FLOAT:  PUSH_BYTE(fabs(POP_FLOAT() - POP_FLOAT()) < EPSILON); break;
-            case OP_EQUALS_STRING: notImplemented(vm); break;
+            case OP_EQUALS_STRING: {
+                Object* r_str = (Object*)POP_ADDRESS();
+                Object* l_str = (Object*)POP_ADDRESS();
+                if (l_str->size != r_str->size) {
+                    PUSH_BYTE(0);
+                } else {
+                    if (strncmp((char*)l_str->value, (char*)r_str->value, l_str->size) == 0) {
+                        PUSH_BYTE(1);
+                    } else {
+                        PUSH_BYTE(0);
+                    }
+                }
+                break;
+            }
 
             // Inversed comparison sign here and later, 
             // because operand order on stack is inversed.
             case OP_LESS_INT:    PUSH_BYTE(POP_INT()   > POP_INT()); break;
             case OP_LESS_FLOAT:  PUSH_BYTE(POP_FLOAT() > POP_FLOAT()); break;
-            case OP_LESS_STRING: notImplemented(vm); break;
+            case OP_LESS_STRING: {
+                Object* r_str = (Object*)POP_ADDRESS();
+                Object* l_str = (Object*)POP_ADDRESS();
+                int cmp = strncmp(
+                    (char*)l_str->value,
+                    (char*)r_str->value, 
+                    l_str->size < r_str->size ? l_str->size : r_str->size
+                );
+                if (cmp == 0) {
+                    PUSH_BYTE(l_str->size < r_str->size);
+                } else {
+                    PUSH_BYTE(cmp < 0);
+                }
+                break;
+            }
 
             case OP_GREATER_INT:    PUSH_BYTE(POP_INT()   < POP_INT());   break;
             case OP_GREATER_FLOAT:  PUSH_BYTE(POP_FLOAT() < POP_FLOAT()); break;
-            case OP_GREATER_STRING: notImplemented(vm); break;
+            case OP_GREATER_STRING: {
+                Object* r_str = (Object*)POP_ADDRESS();
+                Object* l_str = (Object*)POP_ADDRESS();
+                int cmp = strncmp(
+                    (char*)l_str->value,
+                    (char*)r_str->value, 
+                    l_str->size < r_str->size ? l_str->size : r_str->size
+                );
+                if (cmp == 0) {
+                    PUSH_BYTE(l_str->size > r_str->size);
+                } else {
+                    PUSH_BYTE(cmp > 0);
+                }
+                break;
+            }
 
             // Math
             case OP_ADD_INT:        PUSH_INT(  POP_INT()   + POP_INT());   break;
@@ -640,6 +681,7 @@ void interpret(VM* vm) {
                         error(vm, "Couldn't read a string.");
                     }
                 } while (length == 2);
+                length = strlen(value) - 1;
 
                 Object* object = allocateObjectFromValue(
                     &vm->heap,

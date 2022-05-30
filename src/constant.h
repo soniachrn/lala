@@ -10,7 +10,7 @@
 // │ Macros │
 // └────────┘
 
-#define MAX_CONSTANTS 16
+#define MAX_CONSTANTS 255
 
 
 // ┌───────┐

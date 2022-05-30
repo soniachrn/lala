@@ -1132,6 +1132,11 @@ static StatementProperties parseIf(Parser* parser){
     StatementProperties statement_properties = { false };
     StatementProperties if_body_properties = parseStatement(parser);
 
+    // Jump over else clause; fill fump address later
+    pushOpCodeOnStack(parser->chunk, OP_JUMP);
+    size_t after_else_address_position_in_chunk = stackSize(parser->chunk);
+    pushAddressOnStack(parser->chunk, (size_t)0);
+
     // Fill jump over the body address
     size_t after_if_address = stackSize(parser->chunk);
     setAddressOnStack(parser->chunk, after_if_address_position_in_chunk, after_if_address);
@@ -1144,6 +1149,10 @@ static StatementProperties parseIf(Parser* parser){
             else_body_properties.ends_with_return
         );
     }
+
+    // Fill jump over the else clause address
+    size_t after_else_address = stackSize(parser->chunk);
+    setAddressOnStack(parser->chunk, after_else_address_position_in_chunk, after_else_address);
 
     ASSERT_PARSER(parser);
     return statement_properties;
