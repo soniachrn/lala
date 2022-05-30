@@ -24,5 +24,7 @@ function print-primes-in-range(var start: int, var end: int): void {
     }
 }
 
-print-primes-in-range(0, 100)
+print 'Calculates prime numbers from a to b.'
+print 'Enter a b:'
+print-primes-in-range(read int, read int)
 

@@ -556,6 +556,71 @@ void interpret(VM* vm) {
                 break;
             }
 
+            // Rea
+            case OP_READ_BOOL: {
+                int chars_read = 0;
+                scanf("true%n", &chars_read);
+                if (chars_read == 4) {
+                    PUSH_BYTE(1);
+                    break;
+                }
+
+                scanf("false%n", &chars_read);
+                if (chars_read == 5) {
+                    PUSH_BYTE(0);
+                    break;
+                }
+
+                error(vm, "Couldn't read a bool.");
+                break;
+            }
+            case OP_READ_INT: {
+                int32_t value;
+                if (scanf("%d", &value) != 1) {
+                    error(vm, "Couldn't read an int.");
+                }
+                PUSH_INT(value);
+                break;
+            }
+            case OP_READ_FLOAT: {
+                double value;
+                if (scanf("%lf", &value) != 1) {
+                    error(vm, "Couldn't read a float.");
+                }
+                PUSH_FLOAT(value);
+                break;
+            }
+            case OP_READ_STRING: {
+                char* value = NULL;
+                size_t length;
+                do {
+                    if (value != NULL) {
+                        free(value);
+                        value = NULL;
+                    }
+                    if (getline(&value, &length, stdin) == -1) {
+                        if (value != NULL) {
+                            free(value);
+                        }
+                        error(vm, "Couldn't read a string.");
+                    }
+                } while (length == 2);
+
+                Object* object = allocateObjectFromValue(
+                    &vm->heap,
+                    &vm->stack,
+                    &vm->stack_references_positions,
+                    REFERENCE_RULE_PLAIN,
+                    NULL,
+                    length,
+                    (uint8_t*)value
+                );
+                PUSH_REF_ADDRESS((size_t)object);
+
+                free(value);
+                break;
+            }
+
             // Jump
             case OP_JUMP:
                 vm->ip = vm->source + readAddressFromSource(vm);
@@ -679,9 +744,9 @@ void interpret(VM* vm) {
             case OP_SUBSCRIPT_GET_FLOAT:   SUBSCRIPT_GET_OP(double,  PUSH_FLOAT);       break;
             case OP_SUBSCRIPT_GET_ADDRESS: SUBSCRIPT_GET_OP(size_t,  PUSH_REF_ADDRESS); break;
 
-            case OP_SUBSCRIPT_SET_BYTE:    SUBSCRIPT_SET_OP(uint8_t, POP_BYTE);        break;
-            case OP_SUBSCRIPT_SET_INT:     SUBSCRIPT_SET_OP(int32_t, POP_INT);         break;
-            case OP_SUBSCRIPT_SET_FLOAT:   SUBSCRIPT_SET_OP(double,  POP_FLOAT);       break;
+            case OP_SUBSCRIPT_SET_BYTE:    SUBSCRIPT_SET_OP(uint8_t, POP_BYTE);    break;
+            case OP_SUBSCRIPT_SET_INT:     SUBSCRIPT_SET_OP(int32_t, POP_INT);     break;
+            case OP_SUBSCRIPT_SET_FLOAT:   SUBSCRIPT_SET_OP(double,  POP_FLOAT);   break;
             case OP_SUBSCRIPT_SET_ADDRESS: SUBSCRIPT_SET_OP(size_t,  POP_ADDRESS); break;
 
 #undef SUBSCRIPT_SET_OP

@@ -103,6 +103,12 @@ typedef enum {
     OP_PRINT_FLOAT,
     OP_PRINT_STRING,
 
+    // Read
+    OP_READ_BOOL,
+    OP_READ_INT,
+    OP_READ_FLOAT,
+    OP_READ_STRING,
+
     // Jump
     OP_JUMP,
     OP_JUMP_IF_TRUE,

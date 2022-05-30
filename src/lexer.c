@@ -463,6 +463,22 @@ static TokenType identifierTokenType(const Lexer* lexer) {
         return TOKEN_IDENTIFIER;                                                     \
     }
 
+#define TRY_MATCH_THREE_KEYWORDS(index,                                              \
+    case_1, keyword_1, token_type_1,                                                 \
+    case_2, keyword_2, token_type_2,                                                 \
+    case_3, keyword_3, token_type_3                                                  \
+)                                                                                    \
+    {                                                                                \
+        if (length > index) {                                                        \
+            switch (lexer->token_start[index]) {                                     \
+                case case_1: return tryMatchKeyword(lexer, keyword_1, token_type_1); \
+                case case_2: return tryMatchKeyword(lexer, keyword_2, token_type_2); \
+                case case_3: return tryMatchKeyword(lexer, keyword_3, token_type_3); \
+            }                                                                        \
+        }                                                                            \
+        return TOKEN_IDENTIFIER;                                                     \
+    }
+
 #define TRY_MATCH_FOUR_KEYWORDS(index,                                               \
     case_1, keyword_1, token_type_1,                                                 \
     case_2, keyword_2, token_type_2,                                                 \
@@ -486,7 +502,6 @@ static TokenType identifierTokenType(const Lexer* lexer) {
         case 'd': return tryMatchKeyword(lexer, "do",        TOKEN_DO);
         case 'm': return tryMatchKeyword(lexer, "mutable",   TOKEN_MUTABLE);
         case 'o': return tryMatchKeyword(lexer, "or",        TOKEN_OR);
-        case 'r': return tryMatchKeyword(lexer, "return",    TOKEN_RETURN);
         case 't': return tryMatchKeyword(lexer, "true",      TOKEN_TRUE);
         case 'w': return tryMatchKeyword(lexer, "while",     TOKEN_WHILE);
 
@@ -502,6 +517,8 @@ static TokenType identifierTokenType(const Lexer* lexer) {
                                              'u', "function",  TOKEN_FUNCTION);
         case 'p': TRY_MATCH_TWO_KEYWORDS( 2, 'e', "predicate", TOKEN_PREDICATE,
                                              'i', "print",     TOKEN_PRINT);
+        case 'r': TRY_MATCH_TWO_KEYWORDS( 2, 'a', "read",      TOKEN_READ,
+                                             't', "return",    TOKEN_RETURN);
         case 's': TRY_MATCH_TWO_KEYWORDS( 3, 'i', "string",    TOKEN_STRING,
                                              'u', "structure", TOKEN_STRUCTURE);
         case 'v': TRY_MATCH_TWO_KEYWORDS( 1, 'a', "var",       TOKEN_VAR,
@@ -522,6 +539,7 @@ static TokenType identifierTokenType(const Lexer* lexer) {
     }
 
 #undef TRY_MATCH_FOUR_KEYWORDS
+#undef TRY_MATCH_THREE_KEYWORDS
 #undef TRY_MATCH_TWO_KEYWORDS
 
     return TOKEN_IDENTIFIER;

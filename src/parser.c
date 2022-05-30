@@ -463,10 +463,6 @@ static TokenType advance(Parser* parser) {
         if (parser->previous.type == TOKEN_ERROR) {
             errorAtPrevious(parser, "Lexical", "%.*s", parser->previous.length, parser->previous.start);
         }
-        // while (parser->previous.type == TOKEN_ERROR) {
-        //     errorAtPrevious(parser, "Lexical", "%.*s", parser->previous.length, parser->previous.start);
-        //     parser->previous = readToken(parser->lexer);
-        // }
     }
 
     ASSERT_PARSER(parser);
@@ -1882,6 +1878,35 @@ static ValueType* parsePrimary(Parser* parser, ExpressionKind expression_kind) {
             value_type = &VALUE_TYPE_STRING;
             break;
         }
+
+        case TOKEN_READ:
+            switch (advance(parser)) {
+                case TOKEN_BOOL:
+                    pushOpCodeOnStack(parser->chunk, OP_READ_BOOL);
+                    value_type = &VALUE_TYPE_BOOL;
+                    break;
+                case TOKEN_INT:
+                    pushOpCodeOnStack(parser->chunk, OP_READ_INT);
+                    value_type = &VALUE_TYPE_INT;
+                    break;
+                case TOKEN_FLOAT:
+                    pushOpCodeOnStack(parser->chunk, OP_READ_FLOAT);
+                    value_type = &VALUE_TYPE_FLOAT;
+                    break;
+                case TOKEN_STRING:
+                    pushOpCodeOnStack(parser->chunk, OP_READ_STRING);
+                    value_type = &VALUE_TYPE_STRING;
+                    break;
+                default:
+                    errorAtPrevious(
+                        parser,
+                        "Semantic",
+                        "Expected read to be followed by bool, int, float or string. Got %s.",
+                        tokenTypeName(previous(parser).type)
+                    );
+                    break;
+            }
+            break;
         
         case TOKEN_IDENTIFIER: {
             // Find the variable.

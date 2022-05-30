@@ -81,6 +81,7 @@ primary         : TRUE
                 | INTEGER_VALUE
                 | FLOAT_VALUE
                 | STRING_VALUE
+                | READ (BOOL | INT | FLOAT | STRING)
                 | ID
                 | array
                 | LPAREN expression RPAREN
@@ -147,6 +148,7 @@ MUTABLE         : mutable ;
 OR              : or ;
 PREDICATE       : predicate ;
 PRINT           : print ;
+READ            : read ;
 RETURN          : return ;
 STRING          : string ;
 STRUCTURE       : structure ;

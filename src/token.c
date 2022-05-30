@@ -59,6 +59,7 @@ const char* tokenTypeName(TokenType type) {
         case TOKEN_OR:                 return "OR";
         case TOKEN_PREDICATE:          return "PREDICATE";
         case TOKEN_PRINT:              return "PRINT";
+        case TOKEN_READ:               return "READ";
         case TOKEN_RETURN:             return "RETURN";
         case TOKEN_STRING:             return "STRING";
         case TOKEN_STRUCTURE:          return "STRUCTURE";

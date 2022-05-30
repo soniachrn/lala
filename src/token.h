@@ -68,6 +68,7 @@ typedef enum {
     TOKEN_OR,
     TOKEN_PREDICATE,
     TOKEN_PRINT,
+    TOKEN_READ,
     TOKEN_RETURN,
     TOKEN_STRING,
     TOKEN_STRUCTURE,

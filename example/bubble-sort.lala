@@ -18,8 +18,8 @@ function int-array-to-string(var array: [int], var length: int): string {
 function bubble-sort-int-array(var array: [int], var length: int): void {
     var n: int = length
 
-    var did-swap: bool = true
-    while did-swap {
+    var did-swap: bool = false
+    do {
         did-swap = false
 
         var i: int = 1
@@ -33,7 +33,7 @@ function bubble-sort-int-array(var array: [int], var length: int): void {
             i = i + 1
         }
         n = n - 1
-    }
+    } while did-swap
 }
 
 

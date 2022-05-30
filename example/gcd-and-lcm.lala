@@ -13,8 +13,10 @@ function lcm(var a: int, var b: int): int
     return a * b / gcd(a, b)
 
 
-var a: int = 18
-var b: int = 12
+print 'Calculates GCD and LCM of a and b.'
+print 'Enter a b:'
+var a: int = read int
+var b: int = read int
 
 print 'GCD(' + a: string + ', ' + b: string + ') = ' + gcd(a, b): string
 print 'LCM(' + a: string + ', ' + b: string + ') = ' + lcm(a, b): string
