@@ -1,0 +1,129 @@
+
+structure IntStack {
+    size:     int
+    capacity: int
+    values:   [int]
+}
+
+function assert-int-stack(var stack: IntStack): void {
+    if stack.capacity < 0 {
+        print 'Error: stack capacity is less than 0'
+    }
+    if stack.size < 0 {
+        print 'Error: stack size is less than 0'
+    }
+    if stack.capacity > stack.size {
+        print (
+            'Error: stack capacity (' + 
+            stack.capacity: string + 
+            ') is greater than stack size (' + 
+            stack.size: string + 
+            ')'
+        )
+    }
+}
+
+function create-int-stack(): IntStack
+    return IntStack(0, 0, [])
+
+function resize-int-stack(var stack: IntStack, var new-capacity: int): void {
+    assert-int-stack(stack)
+
+    if new-capacity < 8 {
+        print 'Error: trying to resize a stack to ' + new-capacity: string + ' < 8 elements'
+        return
+    }
+    if new-capacity == stack.capacity {
+        print 'Error: trying to resize a stack to the same capacity as it already is'
+        return
+    }
+
+    var new-values: [int] = [0] * new-capacity
+    
+    var n: int = new-capacity
+    if stack.size < new-capacity
+        n = stack.size
+
+    var i: int = 0
+    while i < n {
+        new-values[i] = stack.values[i]
+        i = i + 1
+    }
+
+    stack.values = new-values
+
+    assert-int-stack(stack)
+}
+
+function grow-int-stack(var stack: IntStack): void {
+    if stack.capacity < 8
+        resize-int-stack(stack, 8)
+    else
+        resize-int-stack(stack, stack.capacity * 2)
+}
+
+function shrink-int-stack(var stack: IntStack): void {
+    resize-int-stack(stack, stack.capacity / 2)
+}
+
+function shrink-int-stack-if-needed(var stack: IntStack): void {
+    if stack.capacity / 2 >= 8 and stack.size * 4 < stack.capacity
+        shrink-int-stack(stack)
+}
+
+function push-onto-int-stack(var stack: IntStack, var value: int): void {
+    assert-int-stack(stack)
+
+    if stack.capacity == stack.size
+        grow-int-stack(stack)
+
+    stack.values[stack.size] = value
+    stack.size = stack.size + 1
+
+    assert-int-stack(stack)
+}
+
+function pop-from-int-stack(var stack: IntStack): int {
+    assert-int-stack(stack)
+
+    if stack.size == 0 {
+        print 'Error: trying to pop a value from an empty stack.'
+        return 0
+    }
+
+    var value: int = stack.values[stack.size - 1]
+    stack.size = stack.size - 1
+
+    shrink-int-stack-if-needed(stack)
+
+    assert-int-stack(stack)
+    return value
+}
+
+function clear-int-stack(var stack: IntStack): void {
+    assert-int-stack(stack)
+
+    stack.size = 0
+    shrink-int-stack-if-needed(stack)
+
+    assert-int-stack(stack)
+}
+
+function int-stack-to-string(var stack: IntStack): string {
+    assert-int-stack(stack)
+
+    var str: string = '['
+    
+    var i: int = 0
+    while i < stack.size {
+        str = str + stack.values[i]: string
+        if i < stack.size - 1
+            str = str + ' '
+        i = i + 1
+    }
+
+    str = str + ']'
+
+    return str
+}
+
