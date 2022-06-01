@@ -33,7 +33,8 @@ git clone https://github.com/soniachrn/lala.git lala
 
 2. Собрать lala
 ```
-cmake -S lala -B lala/build && make -C lala/build lala
+cmake -S lala -B lala/build
+make -C lala/build lala
 ```
 
 3. Создать алиас в `.zshrc` или в `.bashrc`
